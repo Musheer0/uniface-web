@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ImageOff, Search, SearchX } from "lucide-react"
+import { ImageOff, Search, SearchX, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -9,7 +9,8 @@ import { UploadFaceDialog } from "./upload-face-dailog"
 import { FaceCard } from "./face-card"
 import { useFaces } from "../hooks/use-faces"
 
-const SKELETON_COUNT = 6
+const SKELETON_COUNT = 8
+const GRID = "grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5"
 
 export const FacesList = () => {
   const [query, setQuery] = useState("")
@@ -29,14 +30,14 @@ export const FacesList = () => {
   if (isPending) {
     return (
       <div>
-        <Skeleton className="mb-4 h-8 w-full max-w-sm" />
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <Skeleton className="mb-5 h-9 w-full max-w-sm" />
+        <div className={GRID}>
           {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
             <div key={i} className="overflow-hidden rounded-xl ring-1 ring-foreground/10">
               <Skeleton className="aspect-square w-full rounded-none" />
-              <div className="space-y-2 p-3">
+              <div className="flex items-center justify-between gap-2 py-2.5 pr-3 pl-3">
                 <Skeleton className="h-4 w-2/3" />
-                <Skeleton className="h-3 w-1/3" />
+                <Skeleton className="size-5 rounded-md" />
               </div>
             </div>
           ))}
@@ -47,23 +48,31 @@ export const FacesList = () => {
 
   if (isError) {
     return (
-      <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-6 text-center">
+      <div
+        role="alert"
+        className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-8 text-center"
+      >
         <p className="text-sm font-medium text-destructive">Couldn&apos;t load faces.</p>
-        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+        <p className="mt-1 text-xs text-muted-foreground">Check your connection and try again.</p>
+        <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
           Try again
         </Button>
       </div>
     )
   }
 
-  if ((faces ?? []).length === 0) {
+  const total = faces?.length ?? 0
+
+  if (total === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-4 py-12 text-center">
-        <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-          <ImageOff />
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-4 py-14 text-center">
+        <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <ImageOff className="size-5" />
         </span>
-        <p className="text-sm font-medium">No faces yet</p>
-        <p className="text-xs text-muted-foreground">Upload a photo or video to get started.</p>
+        <div className="space-y-1">
+          <p className="text-sm font-medium">No faces yet</p>
+          <p className="text-xs text-muted-foreground">Upload a photo or video to add your first face.</p>
+        </div>
         <UploadFaceDialog>
           <Button size="sm">Upload a face</Button>
         </UploadFaceDialog>
@@ -71,37 +80,50 @@ export const FacesList = () => {
     )
   }
 
+  const hasQuery = query.trim().length > 0
+
   return (
     <div>
-      <div className="relative mb-4 w-full max-w-sm">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name…"
-          aria-label="Search faces"
-          className="pl-8"
-        />
+      {/* Toolbar: search on the left, count on the right */}
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search faces"
+            aria-label="Search faces"
+            className="pr-8 pl-8"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute top-1/2 right-2 flex size-5 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+
+        <p className="shrink-0 text-xs text-muted-foreground tabular-nums" aria-live="polite">
+          {hasQuery ? `${filtered.length} of ${total}` : `${total} ${total === 1 ? "face" : "faces"}`}
+        </p>
       </div>
 
-      <p className="mb-3 text-xs text-muted-foreground" aria-live="polite">
-        {query.trim()
-          ? `${filtered.length} of ${faces?.length} faces`
-          : `${faces?.length} face${faces?.length === 1 ? "" : "s"}`}
-      </p>
-
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-12 text-center">
-          <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <SearchX />
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-4 py-14 text-center">
+          <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <SearchX className="size-5" />
           </span>
           <p className="text-sm font-medium">No faces match &ldquo;{query.trim()}&rdquo;</p>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setQuery("")}>
+          <Button type="button" variant="outline" size="sm" onClick={() => setQuery("")}>
             Clear search
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <div className={GRID}>
           {filtered.map((face) => (
             <FaceCard key={face.id} face={face} />
           ))}

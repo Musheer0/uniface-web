@@ -13,36 +13,29 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { useDeleteFace } from "../hooks/use-upload-face"
 import type { FaceDTO } from "../hooks/use-faces"
-
-function formatBytes(bytes: number | null) {
-  if (bytes == null) return null
-  if (bytes === 0) return "0 B"
-  const k = 1024
-  const sizes = ["B", "KB", "MB", "GB"]
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1)
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
-}
 
 export const FaceCard = ({ face }: { face: FaceDTO }) => {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const { mutate, isPending } = useDeleteFace()
   const isVideo = face.mimeType?.startsWith("video/") ?? false
-  const size = formatBytes(face.size)
 
   return (
-    <Card className="min-w-0 overflow-hidden">
-      <div className="flex aspect-square w-full items-center justify-center overflow-hidden bg-black">
+    <figure
+      className="group min-w-0 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 transition-shadow hover:ring-foreground/25 data-[pending=true]:opacity-60"
+      data-pending={isPending}
+    >
+      {/* Media: cropped square so faces fill the tile and the grid stays even */}
+      <div className="aspect-square w-full overflow-hidden bg-muted">
         {isVideo ? (
           <video
             src={face.url}
             preload="metadata"
             playsInline
-            className="h-full w-full object-contain"
+            muted
+            className="h-full w-full object-cover"
           />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
@@ -50,37 +43,31 @@ export const FaceCard = ({ face }: { face: FaceDTO }) => {
             src={face.url}
             alt={face.name}
             loading="lazy"
-            className="h-full w-full object-contain"
+            className="h-full w-full object-cover"
           />
         )}
       </div>
-      <CardContent className="min-w-0 pt-3">
-        <p className="truncate text-sm font-medium">{face.name}</p>
-        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
-          {face.mimeType && (
-            <Badge variant="secondary" className="max-w-full truncate">
-              {face.mimeType.split("/")[1] ?? face.mimeType}
-            </Badge>
-          )}
-          {size && <span className="text-xs text-muted-foreground">{size}</span>}
-        </div>
-      </CardContent>
-      <CardFooter className="justify-end pt-0">
+
+      {/* Name + delete share one row */}
+      <figcaption className="flex items-center justify-between gap-2 py-1.5 pr-1.5 pl-3">
+        <span className="truncate text-sm font-medium" title={face.name}>
+          {face.name}
+        </span>
+
         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
           <AlertDialogTrigger
             render={
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
+                size="icon"
                 aria-label={`Delete ${face.name}`}
-                className="text-destructive hover:text-destructive"
+                className="size-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               />
             }
             disabled={isPending}
           >
             {isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
-            Delete
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -100,13 +87,12 @@ export const FaceCard = ({ face }: { face: FaceDTO }) => {
                   setConfirmOpen(false)
                 }}
               >
-                {isPending && <Loader2 className="animate-spin" />}
                 Delete
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </CardFooter>
-    </Card>
+      </figcaption>
+    </figure>
   )
 }
