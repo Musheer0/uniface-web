@@ -5,7 +5,10 @@ import {
   timestamp,
   boolean,
   index,
+  uuid
 } from "drizzle-orm/pg-core";
+import { createId } from "@paralleldrive/cuid2";
+import { create } from "domain";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -99,3 +102,9 @@ export const accountRelations = relations(account, ({ one }) => ({
     references: [user.id],
   }),
 }));
+export const face = pgTable("face", {
+  id: uuid().primaryKey().$defaultFn(() => createId()),
+  name: text().notNull(),
+  object_key: text().notNull(),
+  user_id:text("user_id").notNull().references(()=>user.id,{onDelete:"cascade"})
+})
