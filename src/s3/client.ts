@@ -4,4 +4,4 @@ export const s3 = new S3Client({
   region: process.env.AWS_REGION!,
 });
 
-export const bucket = process.env.AWS_S3_BUCKET!;
+export const bucket = process.env.S3_BUCKET!;

@@ -5,10 +5,9 @@ import {
   timestamp,
   boolean,
   index,
-  uuid
+  integer
 } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
-import { create } from "domain";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -102,9 +101,20 @@ export const accountRelations = relations(account, ({ one }) => ({
     references: [user.id],
   }),
 }));
-export const face = pgTable("face", {
-  id: uuid().primaryKey().$defaultFn(() => createId()),
+export const media = pgTable("media", {
+  // NOTE: ids are cuid2 strings (e.g. "b2oii1u8hkzsx9ycooi4g85q"), NOT UUIDs,
+  // so this must stay `text` — a `uuid` column rejects every insert.
+  id: text("id").primaryKey().$defaultFn(() => createId()),
   name: text().notNull(),
   object_key: text().notNull(),
-  user_id:text("user_id").notNull().references(()=>user.id,{onDelete:"cascade"})
+  user_id: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  size: integer(),
+  type:text()
+})
+export const face = pgTable("face", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  name: text().notNull(),
+  object_key: text().notNull(),
+  user_id: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  media_id:text("media_id").notNull().references(()=>media.id,{onDelete:"cascade"})
 })
