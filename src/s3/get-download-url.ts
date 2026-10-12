@@ -1,18 +1,9 @@
-"use server"
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { DOWNLOAD_URL_CACHE_TTL, DOWNLOAD_URL_EXPIRES_IN } from "@/lib/constants";
 import { redis } from "@/redis/client";
 import { faceUrlKey } from "@/redis/keys";
 import { bucket, s3 } from "./client";
-
-/** Presigned download URLs are valid for 1 day. */
-export const DOWNLOAD_URL_EXPIRES_IN = 60 * 60 * 24;
-
-/**
- * Redis TTL for cached URLs. Deliberately shorter than the presigned expiry
- * (1h safety margin) so we never serve an expired URL from cache.
- */
-export const DOWNLOAD_URL_CACHE_TTL = DOWNLOAD_URL_EXPIRES_IN - 60 * 60;
 
 /** Raw presigned GET URL for an object key, valid for 1 day. */
 export const getDownloadUrl = async (key: string): Promise<string> => {

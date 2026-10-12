@@ -1,5 +1,5 @@
 "use server"
-import { MAX_PHOTO_LIMIT, MAX_VIDEO_LIMIT } from '@/lib/constants'
+import { MAX_PHOTO_LIMIT, MAX_VIDEO_LIMIT, UPLOAD_URL_EXPIRES_IN } from '@/lib/constants'
 import {createPresignedPost} from '@aws-sdk/s3-presigned-post'
 import { bucket, s3 } from './client'
 import { TRPCError } from '@trpc/server'
@@ -16,7 +16,7 @@ export const getUploadUrl = async (key: string, contentType: string) => {
     Fields: {
       "Content-Type": contentType
     },
-    Expires:60*60
+    Expires:UPLOAD_URL_EXPIRES_IN
   });
   return response;
 }

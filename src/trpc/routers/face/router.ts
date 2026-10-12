@@ -1,9 +1,8 @@
 import { db } from "@/db/drizzle";
 import { face, media } from "@/db/schema";
-import { MAX_PHOTO_LIMIT, MAX_VIDEO_LIMIT } from "@/lib/constants";
+import { MAX_PHOTO_LIMIT, MAX_VIDEO_LIMIT, DOWNLOAD_URL_EXPIRES_IN } from "@/lib/constants";
 import { deleteObject } from "@/s3/delete-object";
 import {
-  DOWNLOAD_URL_EXPIRES_IN,
   getCachedDownloadUrl,
   invalidateDownloadUrl,
 } from "@/s3/get-download-url";
@@ -90,12 +89,11 @@ export const Facerouters = createTRPCRouter({
   getAll: protectProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
     const rows = await db
-      .select({ face, media })
+      .select()
       .from(face)
-      .innerJoin(media, eq(face.media_id, media.id))
       .where(eq(face.user_id, userId))
       .orderBy(asc(face.name));
-    return Promise.all(rows.map((r) => withUrl(r.face, r.media)));
+    return Promise.all(rows.map((row) => withUrl(row, null)));
   }),
 
   /** Single face by id (owner only), with a cached 1-day S3 `url`. */

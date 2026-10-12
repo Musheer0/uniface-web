@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import { isValidElement } from "react"
-import { ImagePlus, Loader2, UploadCloud, X } from "lucide-react"
+import { ImagePlus, Loader2, UploadCloud } from "lucide-react"
+import { XIcon } from "lucide-react"
+import {
+  Attachment,
+  AttachmentAction,
+  AttachmentActions,
+  AttachmentContent,
+  AttachmentDescription,
+  AttachmentMedia,
+  AttachmentTitle,
+} from "@/components/ui/attachment"
+import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,7 +27,9 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { MAX_PHOTO_LIMIT, MAX_VIDEO_LIMIT } from "@/lib/constants"
+import { DOWNLOAD_URL_EXPIRES_IN, MAX_PHOTO_LIMIT } from "@/lib/constants"
+import { useTRPC } from "@/trpc/client"
+import type { FaceDTO } from "../hooks/use-faces"
 import { useDeleteFace, useUploadFace } from "../hooks/use-upload-face"
 
 type UploadStatus = "idle" | "presigning" | "uploading" | "success" | "error"
@@ -26,7 +39,7 @@ type UploadFaceDialogProps = {
   onUploaded?: (face: { id: string; name: string }) => void
 }
 
-const ACCEPT = "image/*,video/*"
+const ACCEPT = "image/*"
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return "0 B"
@@ -34,10 +47,6 @@ function formatBytes(bytes: number) {
   const sizes = ["B", "KB", "MB", "GB"]
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1)
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
-}
-
-function maxSizeFor(file: File) {
-  return file.type.startsWith("image") ? MAX_PHOTO_LIMIT : MAX_VIDEO_LIMIT
 }
 
 /** POST a file to an S3 presigned-POST URL with XHR so we get upload progress. */
@@ -93,11 +102,12 @@ export const UploadFaceDialog = ({ children, onUploaded }: UploadFaceDialogProps
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const xhrRef = useRef<XMLHttpRequest | null>(null)
+  const trpc = useTRPC()
+  const queryClient = useQueryClient()
   const { mutateAsync, isPending: isPresigning } = useUploadFace()
   const { mutateAsync: deleteFaceAsync } = useDeleteFace()
 
   const isBusy = status === "presigning" || status === "uploading" || isPresigning
-  const isVideo = file?.type.startsWith("video/") ?? false
 
   const revokePreview = useCallback((url: string | null) => {
     if (url && url.startsWith("blob:")) URL.revokeObjectURL(url)
@@ -135,13 +145,12 @@ export const UploadFaceDialog = ({ children, onUploaded }: UploadFaceDialogProps
       if (!next) return
       setError(null)
 
-      if (!next.type.startsWith("image/") && !next.type.startsWith("video/")) {
-        setError("Only image or video files are supported.")
+      if (!next.type.startsWith("image/")) {
+        setError("Only image files are supported.")
         return
       }
-      const limit = maxSizeFor(next)
-      if (next.size > limit) {
-        setError(`File is too large. Max ${formatBytes(limit)}.`)
+      if (next.size > MAX_PHOTO_LIMIT) {
+        setError(`File is too large. Max ${formatBytes(MAX_PHOTO_LIMIT)}.`)
         return
       }
 
@@ -195,6 +204,22 @@ export const UploadFaceDialog = ({ children, onUploaded }: UploadFaceDialogProps
       await uploadViaXHR(upload_data.url, upload_data.fields, file, setProgress, xhrRef)
 
       setStatus("success")
+      // Seed the new face straight into the faces cache — no refetch.
+      // The local blob preview renders instantly; the next fetch swaps in the server URL.
+      const uploaded = face as { id: string; name: string; user_id: string; media_id: string }
+      const entry: FaceDTO = {
+        ...uploaded,
+        fileName: file.name,
+        mimeType: file.type,
+        size: file.size,
+        url: previewUrl ?? "",
+        urlExpiresIn: DOWNLOAD_URL_EXPIRES_IN,
+      }
+      queryClient.setQueryData<FaceDTO[]>(trpc.face.getAll.queryKey(), (old) => [
+        entry,
+        ...(old ?? []).filter((f) => f.id !== entry.id),
+      ])
+      queryClient.setQueryData<FaceDTO>(trpc.face.getById.queryKey({ id: entry.id }), entry)
       onUploaded?.(face as { id: string; name: string })
       // Close (and reset) shortly after success so the user sees 100%
       setTimeout(() => {
@@ -244,7 +269,7 @@ export const UploadFaceDialog = ({ children, onUploaded }: UploadFaceDialogProps
         >
           <DialogTitle>Add a face</DialogTitle>
           <DialogDescription>
-            Give it a name, pick a photo or short video, then upload.
+            Give it a name, pick a photo, then upload.
           </DialogDescription>
         </DialogHeader>
 
@@ -280,44 +305,54 @@ export const UploadFaceDialog = ({ children, onUploaded }: UploadFaceDialogProps
 
             {previewUrl && file ? (
               <div
-                className="relative min-w-0 max-w-full overflow-hidden rounded-xl border bg-muted/40"
+                className="min-w-0 max-w-full"
                 style={{ boxSizing: "border-box" }}
               >
-                {isVideo ? (
-                  <video
-                    src={previewUrl}
-                    controls
-                    muted
-                    playsInline
-                    className="max-h-56 w-full min-w-0 max-w-full bg-black object-contain sm:max-h-64"
-                  />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={previewUrl}
-                    alt={file.name}
-                    className="max-h-56 w-full min-w-0 max-w-full object-contain sm:max-h-64"
-                  />
-                )}
-                <div className="flex min-w-0 max-w-full items-center justify-between gap-2 px-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{file.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {formatBytes(file.size)} · {file.type || "unknown type"}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={isBusy}
-                    onClick={clearFile}
-                    aria-label="Remove file"
-                    className="shrink-0"
-                  >
-                    <X />
-                  </Button>
-                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewUrl}
+                  alt={file.name}
+                  className="max-h-56 w-full min-w-0 max-w-full rounded-xl border object-contain sm:max-h-64"
+                />
+                <Attachment
+                  state={status === "uploading" || status === "presigning" ? "uploading" : "done"}
+                  className="mt-2 w-full min-w-0 max-w-full"
+                >
+                  <AttachmentMedia variant="image">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={previewUrl} alt="" />
+                  </AttachmentMedia>
+                  <AttachmentContent>
+                    <AttachmentTitle>{file.name}</AttachmentTitle>
+                    <AttachmentDescription>
+                      {status === "uploading"
+                        ? `Uploading · ${progress}%`
+                        : status === "presigning"
+                          ? "Preparing upload…"
+                          : status === "success"
+                            ? "Upload complete"
+                            : `${formatBytes(file.size)} · ${file.type || "image"}`}
+                    </AttachmentDescription>
+                  </AttachmentContent>
+                  <AttachmentActions>
+                    {status === "uploading" ? (
+                      <AttachmentAction
+                        aria-label="Cancel upload"
+                        onClick={() => xhrRef.current?.abort()}
+                      >
+                        <XIcon />
+                      </AttachmentAction>
+                    ) : (
+                      <AttachmentAction
+                        aria-label="Remove file"
+                        disabled={isBusy}
+                        onClick={clearFile}
+                      >
+                        <XIcon />
+                      </AttachmentAction>
+                    )}
+                  </AttachmentActions>
+                </Attachment>
               </div>
             ) : (
               <button
@@ -345,8 +380,7 @@ export const UploadFaceDialog = ({ children, onUploaded }: UploadFaceDialogProps
                   {dragOver ? "Drop the file to preview it" : "Click to choose, or drag & drop"}
                 </span>
                 <span className="min-w-0 max-w-full text-xs text-muted-foreground">
-                  Images up to {formatBytes(MAX_PHOTO_LIMIT)} · videos up to{" "}
-                  {formatBytes(MAX_VIDEO_LIMIT)}
+                  Images up to {formatBytes(MAX_PHOTO_LIMIT)}
                 </span>
               </button>
             )}

@@ -1,7 +1,14 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import type { inferRouterOutputs } from "@trpc/server"
 import { useTRPC } from "@/trpc/client"
+import type { AppRouter } from "@/trpc/routers/_app"
+
+type RouterOutputs = inferRouterOutputs<AppRouter>
+
+/** Public face shape returned by `getAll` / `getById` (no `object_key`). */
+export type FaceDTO = RouterOutputs["face"]["getAll"][number]
 
 /** All faces of the current user, each with a presigned `url` (no `object_key`). */
 export const useFaces = () => {
@@ -10,12 +17,15 @@ export const useFaces = () => {
 }
 
 /** Single face by id, with a presigned `url` (no `object_key`). */
-export const useFace = (id: string, enabled = true) => {
+export const useFaceById = (id: string, enabled = true) => {
   const trpc = useTRPC()
   return useQuery(
     trpc.face.getById.queryOptions({ id }, { enabled: enabled && id.length > 0 }),
   )
 }
+
+/** Alias of {@link useFaceById}. */
+export const useFace = useFaceById
 
 /** Rename a face; refreshes the face lists on success. */
 export const useUpdateFace = () => {
