@@ -2,11 +2,38 @@ import { db } from "@/db/drizzle";
 import { face, media } from "@/db/schema";
 import { MAX_PHOTO_LIMIT, MAX_VIDEO_LIMIT } from "@/lib/constants";
 import { deleteObject } from "@/s3/delete-object";
+import {
+  DOWNLOAD_URL_EXPIRES_IN,
+  getCachedDownloadUrl,
+  invalidateDownloadUrl,
+} from "@/s3/get-download-url";
 import { getUploadUrl } from "@/s3/get-upload-url";
 import { createTRPCRouter, protectProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import z from "zod";
+
+type FaceRow = typeof face.$inferSelect;
+type MediaRow = typeof media.$inferSelect;
+
+/**
+ * Public shape for a face. `object_key` is never exposed — clients get a
+ * presigned `url` (valid for 1 day) instead.
+ */
+const toFaceDTO = (faceRow: FaceRow, mediaRow: MediaRow | null, url: string) => {
+  const { object_key: _objectKey, ...rest } = faceRow;
+  return {
+    ...rest,
+    fileName: mediaRow?.name ?? null,
+    mimeType: mediaRow?.type ?? null,
+    size: mediaRow?.size ?? null,
+    url,
+    urlExpiresIn: DOWNLOAD_URL_EXPIRES_IN,
+  };
+};
+
+const withUrl = async (faceRow: FaceRow, mediaRow: MediaRow | null) =>
+  toFaceDTO(faceRow, mediaRow, await getCachedDownloadUrl(faceRow.object_key));
 
 export const Facerouters = createTRPCRouter({
   uploadFace: protectProcedure.input(
@@ -59,6 +86,54 @@ export const Facerouters = createTRPCRouter({
     return {face:rest,upload_data}
   }),
 
+  /** All faces of the current user, each with a cached 1-day S3 `url`. */
+  getAll: protectProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const rows = await db
+      .select({ face, media })
+      .from(face)
+      .innerJoin(media, eq(face.media_id, media.id))
+      .where(eq(face.user_id, userId))
+      .orderBy(asc(face.name));
+    return Promise.all(rows.map((r) => withUrl(r.face, r.media)));
+  }),
+
+  /** Single face by id (owner only), with a cached 1-day S3 `url`. */
+  getById: protectProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const rows = await db
+        .select({ face, media })
+        .from(face)
+        .innerJoin(media, eq(face.media_id, media.id))
+        .where(and(eq(face.id, input.id), eq(face.user_id, userId)))
+        .limit(1);
+      const row = rows[0];
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Face not found" });
+      return withUrl(row.face, row.media);
+    }),
+
+  /** Rename a face (owner only). The object key is unchanged, so cached URLs stay valid. */
+  updateFace: protectProcedure
+    .input(z.object({ id: z.string(), name: z.string().trim().min(1).max(100) }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const rows = await db
+        .update(face)
+        .set({ name: input.name })
+        .where(and(eq(face.id, input.id), eq(face.user_id, userId)))
+        .returning();
+      const updated = rows[0];
+      if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Face not found" });
+      const mediaRows = await db
+        .select()
+        .from(media)
+        .where(eq(media.id, updated.media_id))
+        .limit(1);
+      return withUrl(updated, mediaRows[0] ?? null);
+    }),
+
   /**
    * Delete a face and its media row (plus the S3 object, best-effort).
    * Used to clean up after a failed/orphaned upload:
@@ -102,6 +177,8 @@ export const Facerouters = createTRPCRouter({
       catch {
         console.error("Error deleting",objectKey)
       }
+      // Drop the cached download URL so it can never be served again.
+      await invalidateDownloadUrl(objectKey);
     }
 
     if (mediaId) {
