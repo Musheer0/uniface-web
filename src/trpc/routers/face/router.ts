@@ -76,6 +76,7 @@ export const Facerouters = createTRPCRouter({
     let upload_data: Awaited<ReturnType<typeof getUploadUrl>>;
     try {
       upload_data = await getUploadUrl(key, input.file_type);
+      await db.update(media).set({object_key:key}).where(eq(media.id,mediaId))
     } catch (err) {
       // Presign failed — roll back both rows (face first due to FK).
       await db.delete(face).where(and(eq(face.id, new_face.id), eq(face.user_id, userId)));

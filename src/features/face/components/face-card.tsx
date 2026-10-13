@@ -24,75 +24,81 @@ export const FaceCard = ({ face }: { face: FaceDTO }) => {
 
   return (
     <figure
-      className="group min-w-0 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 transition-shadow hover:ring-foreground/25 data-[pending=true]:opacity-60"
+      className="group relative aspect-square min-w-0 overflow-hidden rounded-2xl bg-muted transition-opacity data-[pending=true]:opacity-60"
       data-pending={isPending}
     >
-      {/* Media: cropped square so faces fill the tile and the grid stays even */}
-      <div className="aspect-square w-full overflow-hidden bg-muted">
-        {isVideo ? (
-          <video
-            src={face.url}
-            preload="metadata"
-            playsInline
-            muted
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={face.url}
-            alt={face.name}
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
-        )}
-      </div>
+      {/* Full-bleed media: cropped so faces fill the tile and the grid stays even */}
+      {isVideo ? (
+        <video
+          src={face.url}
+          preload="metadata"
+          playsInline
+          muted
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={face.url}
+          alt={face.name}
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
 
-      {/* Name + delete share one row */}
-      <figcaption className="flex items-center justify-between gap-2 py-1.5 pr-1.5 pl-3">
-        <span className="truncate text-sm font-medium" title={face.name}>
+      {/* Name overlaid at the bottom, on a soft gradient for legibility */}
+      <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent px-4 pt-12 pb-3.5">
+        <span
+          className="block truncate text-lg font-medium text-white drop-shadow-sm"
+          title={face.name}
+        >
           {face.name}
         </span>
-
-        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-          <AlertDialogTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={`Delete ${face.name}`}
-                className="size-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              />
-            }
-            disabled={isPending}
-          >
-            {isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this face?</AlertDialogTitle>
-              <AlertDialogDescription>
-                &ldquo;{face.name}&rdquo; and its file will be permanently deleted. This
-                action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                disabled={isPending}
-                onClick={() => {
-                  mutate({ faceId: face.id })
-                  setConfirmOpen(false)
-                }}
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </figcaption>
+
+      {/* Delete button: top-left, replaces the old icon */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Delete ${face.name}`}
+              className="absolute top-3 left-3 size-8 rounded-full bg-black/45 text-white backdrop-blur-sm hover:bg-destructive hover:text-white focus-visible:ring-2 focus-visible:ring-white"
+            />
+          }
+          disabled={isPending}
+        >
+          {isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Trash2 className="size-4" />
+          )}
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this face?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &ldquo;{face.name}&rdquo; and its file will be permanently deleted. This
+              action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={isPending}
+              onClick={() => {
+                mutate({ faceId: face.id })
+                setConfirmOpen(false)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </figure>
   )
 }

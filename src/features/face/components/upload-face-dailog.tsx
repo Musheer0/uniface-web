@@ -2,17 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import { isValidElement } from "react"
-import { ImagePlus, Loader2, UploadCloud } from "lucide-react"
-import { XIcon } from "lucide-react"
-import {
-  Attachment,
-  AttachmentAction,
-  AttachmentActions,
-  AttachmentContent,
-  AttachmentDescription,
-  AttachmentMedia,
-  AttachmentTitle,
-} from "@/components/ui/attachment"
+import { Check, Loader2, UploadCloud, XIcon } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -20,7 +10,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -243,6 +232,17 @@ export const UploadFaceDialog = ({ children, onUploaded }: UploadFaceDialogProps
 
   const canSubmit = file !== null && name.trim().length > 0 && !isBusy && status !== "success"
 
+  const fileStatusText =
+    status === "uploading"
+      ? `Uploading · ${progress}%`
+      : status === "presigning"
+        ? "Preparing upload…"
+        : status === "success"
+          ? "Upload complete"
+          : file
+            ? `${formatBytes(file.size)} · ${file.type || "image"}`
+            : ""
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {isValidElement(children) ? (
@@ -252,195 +252,180 @@ export const UploadFaceDialog = ({ children, onUploaded }: UploadFaceDialogProps
       )}
 
       <DialogContent
-        className="flex max-w-none flex-col overflow-hidden sm:max-w-none"
+        showCloseButton={false}
+        className="flex shadow-[inset_0_1px_2px_rgba(255,255,255,0.08),inset_0_-1px_2px_rgba(0,0,0,0.12)] max-w-none flex-col gap-3 overflow-hidden rounded-3xl bg-card p-5 sm:max-w-none"
         style={{
-          width: "min(560px, calc(100vw - 32px))",
+          width: "min(520px, calc(100vw - 32px))",
           maxWidth: "100%",
           maxHeight: "calc(100dvh - 32px)",
-          minWidth: 0,
-          boxSizing: "border-box",
-          display: "flex",
-          flexDirection: "column",
         }}
       >
-        <DialogHeader
-          className="min-w-0 max-w-full shrink-0 pr-8"
-          style={{ boxSizing: "border-box" }}
-        >
-          <DialogTitle>Add a face</DialogTitle>
-          <DialogDescription>
+        {/* Title + close */}
+        <DialogHeader className="shrink-0 flex-row items-center justify-between gap-3">
+          <DialogTitle className="text-lg font-semibold">Add a face</DialogTitle>
+          <DialogDescription className="sr-only">
             Give it a name, pick a photo, then upload.
           </DialogDescription>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={() => handleOpenChange(false)}
+            className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-accent"
+          >
+            <XIcon className="size-5" />
+          </button>
         </DialogHeader>
 
-        <div
-          className="grid min-h-0 w-full min-w-0 max-w-full flex-1 gap-4 overflow-x-hidden overflow-y-auto"
-          style={{ boxSizing: "border-box" }}
-        >
-          <div className="grid min-w-0 max-w-full gap-1.5" style={{ boxSizing: "border-box" }}>
-            <Label htmlFor="face-name">Name</Label>
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPT}
+            className="hidden"
+            disabled={isBusy}
+            onChange={(e) => {
+              pickFile(e.target.files?.[0] ?? null)
+              e.target.value = ""
+            }}
+          />
+
+          {/* Name panel */}
+          <div className="flex h-44 shrink-0 flex-col items-center justify-center gap-1 rounded-2xl bg-muted/50 px-5 transition-shadow focus-within:ring-2 focus-within:ring-ring/40">
+            <Label htmlFor="face-name" className="text-sm font-normal text-muted-foreground">
+              Name
+            </Label>
             <Input
               id="face-name"
-              placeholder="e.g. Ada"
+              placeholder="Enter name"
               value={name}
               disabled={isBusy}
               onChange={(e) => setName(e.target.value)}
-              className="w-full min-w-0 max-w-full"
+              className="h-auto w-full min-w-0 rounded-none border-0 bg-transparent px-0 py-1 text-center text-3xl font-semibold shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0 disabled:bg-transparent md:text-3xl dark:bg-transparent dark:disabled:bg-transparent"
             />
           </div>
 
-          <div className="grid min-w-0 max-w-full gap-1.5" style={{ boxSizing: "border-box" }}>
-            <Label>File</Label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ACCEPT}
-              className="hidden"
-              disabled={isBusy}
-              onChange={(e) => {
-                pickFile(e.target.files?.[0] ?? null)
-                e.target.value = ""
-              }}
-            />
-
-            {previewUrl && file ? (
-              <div
-                className="min-w-0 max-w-full"
-                style={{ boxSizing: "border-box" }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+          {/* Photo row */}
+          <div
+            onDragOver={(e) => {
+              if (isBusy || file) return
+              e.preventDefault()
+              setDragOver(true)
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              if (isBusy || file) return
+              handleDrop(e)
+            }}
+            className={cn(
+              "relative shrink-0 overflow-hidden rounded-2xl bg-muted/50 transition-shadow",
+              dragOver && "ring-2 ring-primary",
+            )}
+          >
+            <div className="flex min-h-16 items-center gap-3 px-5 py-3">
+              {previewUrl && file && (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={previewUrl}
-                  alt={file.name}
-                  className="max-h-56 w-full min-w-0 max-w-full rounded-xl border object-contain sm:max-h-64"
+                  alt=""
+                  className="size-10 shrink-0 rounded-lg border object-cover"
                 />
-                <Attachment
-                  state={status === "uploading" || status === "presigning" ? "uploading" : "done"}
-                  className="mt-2 w-full min-w-0 max-w-full"
-                >
-                  <AttachmentMedia variant="image">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={previewUrl} alt="" />
-                  </AttachmentMedia>
-                  <AttachmentContent>
-                    <AttachmentTitle>{file.name}</AttachmentTitle>
-                    <AttachmentDescription>
-                      {status === "uploading"
-                        ? `Uploading · ${progress}%`
-                        : status === "presigning"
-                          ? "Preparing upload…"
-                          : status === "success"
-                            ? "Upload complete"
-                            : `${formatBytes(file.size)} · ${file.type || "image"}`}
-                    </AttachmentDescription>
-                  </AttachmentContent>
-                  <AttachmentActions>
-                    {status === "uploading" ? (
-                      <AttachmentAction
-                        aria-label="Cancel upload"
-                        onClick={() => xhrRef.current?.abort()}
-                      >
-                        <XIcon />
-                      </AttachmentAction>
-                    ) : (
-                      <AttachmentAction
-                        aria-label="Remove file"
-                        disabled={isBusy}
-                        onClick={clearFile}
-                      >
-                        <XIcon />
-                      </AttachmentAction>
-                    )}
-                  </AttachmentActions>
-                </Attachment>
-              </div>
-            ) : (
-              <button
-                type="button"
-                disabled={isBusy}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setDragOver(true)
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-                className={cn(
-                  "flex w-full min-w-0 max-w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition-colors",
-                  "hover:border-ring hover:bg-muted/40",
-                  dragOver ? "border-ring bg-muted/40" : "border-input",
-                  isBusy && "pointer-events-none opacity-60",
-                )}
-                style={{ boxSizing: "border-box" }}
-              >
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                  {dragOver ? <UploadCloud /> : <ImagePlus />}
-                </span>
-                <span className="min-w-0 max-w-full text-sm font-medium">
-                  {dragOver ? "Drop the file to preview it" : "Click to choose, or drag & drop"}
-                </span>
-                <span className="min-w-0 max-w-full text-xs text-muted-foreground">
-                  Images up to {formatBytes(MAX_PHOTO_LIMIT)}
-                </span>
-              </button>
-            )}
-          </div>
+              )}
 
-          {(status === "presigning" || status === "uploading" || status === "success") && (
-            <div
-              className="grid min-w-0 max-w-full gap-1.5"
-              aria-live="polite"
-              style={{ boxSizing: "border-box" }}
-            >
-              <div className="flex min-w-0 max-w-full items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span className="min-w-0 flex-1 truncate">
-                  {status === "presigning"
-                    ? "Preparing upload…"
-                    : status === "success"
-                      ? "Upload complete"
-                      : `Uploading… ${progress}%`}
-                </span>
-                <span className="shrink-0">{progress}%</span>
+              <div className="min-w-0 flex-1">
+                {file ? (
+                  <>
+                    <p className="truncate text-sm font-medium">{file.name}</p>
+                    <p className="truncate text-sm text-muted-foreground">{fileStatusText}</p>
+                  </>
+                ) : (
+                  <p className="text-base font-medium">
+                    {dragOver ? "Drop image to upload" : "Add a photo"}
+                  </p>
+                )}
               </div>
+
+              {!file && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={isBusy}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-9 shrink-0 rounded-lg px-3.5"
+                >
+                  <UploadCloud />
+                  Upload
+                </Button>
+              )}
+
+              {file && status === "presigning" && (
+                <Loader2 className="size-5 shrink-0 animate-spin text-muted-foreground" />
+              )}
+              {file && status === "success" && (
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Check className="size-4" strokeWidth={3} />
+                </span>
+              )}
+              {file && status !== "presigning" && status !== "success" && (
+                <button
+                  type="button"
+                  aria-label={status === "uploading" ? "Cancel upload" : "Remove file"}
+                  onClick={status === "uploading" ? () => xhrRef.current?.abort() : clearFile}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <XIcon className="size-4" />
+                </button>
+              )}
+            </div>
+
+            {(status === "presigning" || status === "uploading" || status === "success") && (
               <div
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={status === "presigning" ? undefined : progress}
-                className="h-2 w-full min-w-0 max-w-full overflow-hidden rounded-full bg-muted"
+                className="absolute inset-x-0 bottom-0 h-1 bg-foreground/10"
               >
                 <div
                   className={cn(
-                    "h-full rounded-full transition-[width]",
-                    status === "presigning" ? "w-1/4 animate-pulse bg-primary/70" : "bg-primary",
+                    "h-full bg-primary transition-[width]",
+                    status === "presigning" && "w-1/4 animate-pulse",
                   )}
                   style={status === "presigning" ? undefined : { width: `${progress}%` }}
                 />
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {error && (
-            <div
-              role="alert"
-              className="min-w-0 max-w-full overflow-x-hidden rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2"
-              style={{ boxSizing: "border-box" }}
-            >
-              <p
-                className="text-sm break-words whitespace-pre-wrap text-destructive"
-                style={{ overflowWrap: "anywhere" }}
-              >
-                {error}
-              </p>
-            </div>
-          )}
+          {/* Helper text, or the error in the same spot */}
+          <div className="min-w-0 shrink-0 px-1" aria-live="polite">
+            {error ? (
+              <div role="alert">
+                <p className="text-sm font-medium text-destructive">Couldn&apos;t upload</p>
+                <p
+                  className="text-sm whitespace-pre-wrap text-destructive/80"
+                  style={{ overflowWrap: "anywhere" }}
+                >
+                  {error}
+                </p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm font-medium">Use a clear photo</p>
+                <p className="text-sm text-muted-foreground">
+                  PNG, JPG, GIF or WEBP, up to {formatBytes(MAX_PHOTO_LIMIT)}. Drag a file onto the photo row or use Upload.
+                </p>
+              </>
+            )}
+          </div>
         </div>
 
-        <DialogFooter className="min-w-0 max-w-full shrink-0">
+        {/* Footer */}
+        <div className="flex shrink-0 items-center justify-end gap-2 pt-1">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             disabled={isBusy}
+            className="h-11 rounded-xl px-5"
             onClick={() => (status === "success" ? (reset(), setOpen(false)) : setOpen(false))}
           >
             Cancel
@@ -449,17 +434,23 @@ export const UploadFaceDialog = ({ children, onUploaded }: UploadFaceDialogProps
             <Button
               type="button"
               variant="outline"
+              className="h-11 rounded-xl px-5"
               onClick={() => xhrRef.current?.abort()}
             >
               Cancel upload
             </Button>
           ) : (
-            <Button type="button" disabled={!canSubmit} onClick={handleUpload}>
+            <Button
+              type="button"
+              disabled={!canSubmit}
+              onClick={handleUpload}
+              className="h-11 rounded-xl px-6 font-semibold"
+            >
               {isBusy && <Loader2 className="animate-spin" />}
               {status === "success" ? "Uploaded" : "Upload"}
             </Button>
           )}
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )

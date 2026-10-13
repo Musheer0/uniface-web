@@ -1,13 +1,14 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ImageOff, Search, SearchX, X } from "lucide-react"
+import { ImageOff, Plus, PlusIcon, Search, SearchX, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { UploadFaceDialog } from "./upload-face-dailog"
 import { FaceCard } from "./face-card"
 import { useFaces } from "../hooks/use-faces"
+import { ActionButton } from "@/components/action-btn"
 
 const SKELETON_COUNT = 8
 const GRID = "grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5"
@@ -86,14 +87,14 @@ export const FacesList = () => {
     <div>
       {/* Toolbar: search on the left, count on the right */}
       <div className="mb-5 flex items-center justify-between gap-3">
-        <div className="relative w-full max-w-sm">
+        <div className="relative w-full max-w-md flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search faces"
             aria-label="Search faces"
-            className="pr-8 pl-8"
+            className="h-auto! pl-8 py-2.5 flex-1 border-none! rounded-xl"
           />
           {query && (
             <button
@@ -107,9 +108,12 @@ export const FacesList = () => {
           )}
         </div>
 
-        <p className="shrink-0 text-xs text-muted-foreground tabular-nums" aria-live="polite">
-          {hasQuery ? `${filtered.length} of ${total}` : `${total} ${total === 1 ? "face" : "faces"}`}
-        </p>
+        <UploadFaceDialog>
+          <ActionButton >
+            <PlusIcon />
+            Add New Face
+        </ActionButton>
+        </UploadFaceDialog>
       </div>
 
       {filtered.length === 0 ? (

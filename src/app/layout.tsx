@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono ,Host_Grotesk} from "next/font/google";
+import { Host_Grotesk} from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 
 const font = Host_Grotesk({
-  subsets:["latin"]
-})
+  subsets: ["latin"],
+  variable: "--font-host-grotesk",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Uniface",
@@ -17,7 +19,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${font.className}  h-full antialiased`}
+      className={`${font.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider
