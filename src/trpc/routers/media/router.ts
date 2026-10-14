@@ -30,6 +30,10 @@ const toMediaDTO = (mediaRow: MediaRow, url: string) => {
 const withUrl = async (mediaRow: MediaRow) =>
   toMediaDTO(mediaRow, await getCachedDownloadUrl(mediaRow.object_key));
 
+/** Shared helper: public DTO for a media row with a cached download `url`. */
+export const withMediaUrl = withUrl;
+export type { MediaRow };
+
 export const MediaRouters = createTRPCRouter({
   /**
    * Create a media row + presigned POST for direct-to-S3 upload

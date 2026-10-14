@@ -10,3 +10,7 @@ export const DOWNLOAD_URL_CACHE_TTL = DOWNLOAD_URL_EXPIRES_IN - 60 * 60;
 
 // Presigned S3 POSTs for uploads, valid for 1 hour (in seconds).
 export const UPLOAD_URL_EXPIRES_IN = 60 * 60;
+
+// Redis TTL for cached generation DTOs (in seconds). Kept short so status
+// polling stays fresh; writes invalidate the key explicitly.
+export const GENERATION_CACHE_TTL = 60;
