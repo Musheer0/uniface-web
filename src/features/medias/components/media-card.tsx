@@ -38,7 +38,12 @@ export const MediaCard = ({ item }: { item: MediaDTO }) => {
       data-pending={isPending}
     >
       {/* Media: cropped square so the grid stays even */}
-      <div className="aspect-square w-full overflow-hidden bg-muted">
+      <div className="aspect-square w-full overflow-hidden bg-muted relative">
+        {item.uploaded_type &&
+          <Badge variant="secondary" className="max-w-full absolute top-2 left-2 truncate">
+            {item.uploaded_type}
+          </Badge>
+        }
         {isVideo ? (
           <video
             src={item.url}
@@ -69,6 +74,7 @@ export const MediaCard = ({ item }: { item: MediaDTO }) => {
                 {item.type.split("/")[1] ?? item.type}
               </Badge>
             )}
+           
             {size && <span className="shrink-0 text-xs text-muted-foreground">{size}</span>}
           </span>
         </span>

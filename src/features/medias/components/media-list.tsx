@@ -4,14 +4,31 @@ import { useMemo, useState } from "react"
 import { FileStack, Search, SearchX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { MediaCard } from "./media-card"
 import { useMedias } from "../hooks/use-medias"
 
 const SKELETON_COUNT = 8
 
+const UPLOADED_TYPE_OPTIONS = [
+  { value: "ALL", label: "All types" },
+  { value: "USER", label: "Uploaded" },
+  { value: "GENERATED", label: "Generated" },
+  { value: "FACE", label: "Faces" },
+] as const
+
+type UploadedTypeFilter = (typeof UPLOADED_TYPE_OPTIONS)[number]["value"]
+
 export const MediaList = () => {
   const [query, setQuery] = useState("")
+  const [uploadedType, setUploadedType] = useState<UploadedTypeFilter>("ALL")
   const {
     data,
     isPending,
@@ -27,11 +44,20 @@ export const MediaList = () => {
     () => data?.pages.flatMap((page) => page.items) ?? [],
     [data],
   )
+  const isFiltering = query.trim().length > 0 || uploadedType !== "ALL"
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return all
-    return all.filter((m) => m.name.toLowerCase().includes(q))
-  }, [all, query])
+    return all.filter(
+      (m) =>
+        (uploadedType === "ALL" || m.uploaded_type === uploadedType) &&
+        (!q || m.name.toLowerCase().includes(q)),
+    )
+  }, [all, query, uploadedType])
+
+  const clearFilters = () => {
+    setQuery("")
+    setUploadedType("ALL")
+  }
 
   if (isPending) {
     return (
@@ -79,19 +105,37 @@ export const MediaList = () => {
 
   return (
     <div>
-      <div className="relative mb-4 w-full max-w-sm">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by file name…"
-          aria-label="Search media"
-          className="pl-8 h-auto! py-2.5 border-none"
-        />
+      <div className="mb-4 flex w-full flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-sm flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by file name…"
+            aria-label="Search media"
+            className="pl-8 h-auto! py-2.5 border-none"
+          />
+        </div>
+        <Select
+          value={uploadedType}
+          
+          onValueChange={(value) => setUploadedType(value as UploadedTypeFilter)}
+        >
+          <SelectTrigger aria-label="Filter by upload type" className="w-36 ml-auto border-none h-auto! py-2.5 ">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            {UPLOADED_TYPE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <p className="mb-3 text-xs text-muted-foreground" aria-live="polite">
-        {query.trim() ? `${filtered.length} of ${all.length} files` : `${all.length} files`}
+        {isFiltering ? `${filtered.length} of ${all.length} files` : `${all.length} files`}
       </p>
 
       {filtered.length === 0 ? (
@@ -99,9 +143,13 @@ export const MediaList = () => {
           <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <SearchX />
           </span>
-          <p className="text-sm font-medium">No files match &ldquo;{query.trim()}&rdquo;</p>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setQuery("")}>
-            Clear search
+          <p className="text-sm font-medium">
+            {query.trim()
+              ? <>No files match &ldquo;{query.trim()}&rdquo;</>
+              : <>No {uploadedType === "ALL" ? "" : `${UPLOADED_TYPE_OPTIONS.find((o) => o.value === uploadedType)?.label.toLowerCase()} `}files found</>}
+          </p>
+          <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+            Clear filters
           </Button>
         </div>
       ) : (
@@ -111,7 +159,7 @@ export const MediaList = () => {
               <MediaCard key={item.id} item={item} />
             ))}
           </div>
-          {hasNextPage && !query.trim() && (
+          {hasNextPage && !isFiltering && (
             <div className="mt-6 flex justify-center">
               <Button
                 type="button"
