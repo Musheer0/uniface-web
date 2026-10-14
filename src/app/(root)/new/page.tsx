@@ -13,22 +13,12 @@ export default function NewPage() {
   return (
     <div className="flex flex-1 flex-col">
       <SiteHeader title="New generation" />
-      <div className="mx-auto w-full max-w-5xl px-4 py-6">
-        <p className="text-sm text-muted-foreground">
-          Pick a face to detect and blur in your next video.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <SelectFaceDialog selectedFaceId={faceId} onSelect={setFaceId}>
-            <Button variant={faceId ? "outline" : "default"}>
-              {faceId ? "Change face" : "Select a face"}
-            </Button>
-          </SelectFaceDialog>
-          {faceId && (
-            <p className="text-sm">
-              Selected: <span className="font-medium">{face?.name ?? faceId}</span>
-            </p>
-          )}
-        </div>
+      <div className="mx-auto h-full w-full max-w-8xl gap-1 flex">
+        <div className="flex-1 h-full bg-secondary"></div> 
+        <div className="flex-4 h-full flex flex-col gap-1">
+          <div className="w-full flex-1 bg-red-500"></div>
+          <div className="w-full flex-9 bg-red-500"></div>
+        </div> 
       </div>
     </div>
   )
