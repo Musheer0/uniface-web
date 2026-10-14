@@ -54,7 +54,8 @@ export const Facerouters = createTRPCRouter({
       type: input.file_type,
       size: input.file_size,
       object_key: key,
-      user_id: userId
+      user_id: userId,
+      uploaded_type:"FACE"
     }).returning({ id: media.id });
     const mediaId = new_media[0].id
     key = key.replace("<faceId>", mediaId)

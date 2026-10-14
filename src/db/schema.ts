@@ -5,9 +5,12 @@ import {
   timestamp,
   boolean,
   index,
-  integer
+  integer,
+  pgEnum
 } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
+import { BlurMethod} from "@blurfield/js";
+import { blur_methods } from "@/lib/backend-client";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -101,6 +104,12 @@ export const accountRelations = relations(account, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+export const media_uploaded_type_enum = pgEnum("MEDIA_TYPE", [
+  "USER",
+  "GENERATED",
+  "FACE"
+])
 export const media = pgTable("media", {
   // NOTE: ids are cuid2 strings (e.g. "b2oii1u8hkzsx9ycooi4g85q"), NOT UUIDs,
   // so this must stay `text` — a `uuid` column rejects every insert.
@@ -109,7 +118,8 @@ export const media = pgTable("media", {
   object_key: text().notNull(),
   user_id: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   size: integer(),
-  type:text()
+  type: text(),
+  uploaded_type:media_uploaded_type_enum().default("USER").notNull()
 })
 export const face = pgTable("face", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
@@ -118,3 +128,52 @@ export const face = pgTable("face", {
   user_id: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
   media_id:text("media_id").notNull().references(()=>media.id,{onDelete:"cascade"})
 })
+
+
+
+export const blur_method_enum = pgEnum("blur_method", blur_methods)
+export const generation_status = pgEnum("generation_status", [
+  "PENDING",
+  "STARTED",
+  "FAILED",
+  "COMPLETED"
+])
+import { sql } from "drizzle-orm";
+
+export const generation = pgTable("generation", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+
+  blur_type: blur_method_enum().notNull(),
+
+  face_id: text("face_id").references(() => face.id, {
+    onDelete: "cascade",
+  }),
+
+  input_media_id: text("input_media_id")
+    .notNull()
+    .references(() => media.id, { onDelete: "cascade" }),
+
+  timestamps: integer()
+    .array()
+    .$type<number[][]>()
+    .notNull()
+    .default(sql`'{}'::integer[]`),
+
+  is_video: boolean().notNull().default(false),
+
+  user_id: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+
+  status: generation_status().notNull().default("PENDING"),
+
+  failure_reason: text(),
+  time_take: integer(),
+
+  output_media_id: text().references(() => media.id, {
+    onDelete: "cascade",
+  }),
+
+  output_object_key: text(), //for fast preview 
+  credits_consumed:integer().default(0)
+});
