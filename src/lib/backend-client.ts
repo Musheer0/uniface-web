@@ -1,5 +1,7 @@
 import {createBlurfieldClient,BlurMethod} from '@blurfield/js'
-export const blurrfield = createBlurfieldClient()
+export const blurrfield = createBlurfieldClient({
+  baseUrl:process.env.BACKEND_URL
+})
 
 export const blur_methods = [
   "blackout",
