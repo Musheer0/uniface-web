@@ -10,6 +10,7 @@ import { useFileUpload } from "@/features/face/hooks"
 import { BlurMethodSelect } from "@/features/generations/components/blur-method-select"
 import ChangeFileButton from "@/features/generations/components/change-file-button"
 import { FaceSelector } from "@/features/generations/components/face-selector"
+import { useGenerateImage } from "@/features/generations/hooks"
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B"
@@ -35,10 +36,15 @@ export function ImageGenerationUI({
   // Same two-step upload as the face dialog: presign → XHR → progress / abort /
   // orphan cleanup. Runs on submit — the returned `media.id` is used below.
   const { upload, abort, progress, status, error, isBusy } = useFileUpload()
+  const { mutateAsync: createGeneration, isPending: isGenerating } = useGenerateImage()
 
   const [blurMethod, setBlurMethod] = useState<BlurMethod>("blackout")
   const [faceId, setFaceId] = useState<string | null>(null)
   const [mediaId, setMediaId] = useState<string | null>(null)
+  const [generationId, setGenerationId] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+
+  const busy = isBusy || isGenerating
 
   const handleCancel = () => {
     abort()
@@ -47,20 +53,27 @@ export function ImageGenerationUI({
   }
 
   const handleSubmit = async () => {
-    if (isBusy) return
+    if (busy) return
+    setSubmitError(null)
     try {
+      // 1. Upload the bytes, then use the returned media id.
       const data = await upload(file)
       if (!data) return // cancelled
       const id = (data.media as { id: string }).id
       setMediaId(id)
-      // Generation endpoint isn't wired up yet — hand off the ids for now.
-      console.log({
-        face_id: faceId,
+
+      // 2. Create the generation record (server logs the ids for now).
+      const generation = await createGeneration({
         media_id: id,
+        face_id: faceId,
         blur_id: blurMethod,
       })
-    } catch {
-      // The hook already surfaces the error in `error` / `status`.
+      setGenerationId(generation.generation_id)
+    } catch (err) {
+      // Upload errors are surfaced by the hook; show generation errors here.
+      if (!error) {
+        setSubmitError(err instanceof Error ? err.message : "Couldn't create the generation.")
+      }
     }
   }
 
@@ -145,7 +158,7 @@ export function ImageGenerationUI({
             <h2 className="text-sm font-semibold">Blur method</h2>
             {status === "success" && <Check className="size-4 text-primary" />}
           </div>
-          <BlurMethodSelect value={blurMethod} onChange={setBlurMethod} disabled={isBusy} />
+          <BlurMethodSelect value={blurMethod} onChange={setBlurMethod} disabled={busy} />
           <p className="text-xs text-muted-foreground">
             Choose how detected faces are obscured.
           </p>
@@ -153,7 +166,7 @@ export function ImageGenerationUI({
 
         <div className="space-y-2">
           <h2 className="text-sm font-semibold">Faces to keep unblurred</h2>
-          <FaceSelector value={faceId} onChange={setFaceId} disabled={isBusy} />
+          <FaceSelector value={faceId} onChange={setFaceId} disabled={busy} />
           <p className="text-xs text-muted-foreground">
             Optional. Selected faces are excluded from blurring.
           </p>
@@ -182,20 +195,29 @@ export function ImageGenerationUI({
             type="button"
             size="lg"
             className="w-full font-semibold"
-            disabled={isBusy}
+            disabled={busy}
             onClick={handleSubmit}
           >
-            {isBusy && <Loader2 className="animate-spin" />}
-            {status === "presigning"
-              ? "Preparing…"
-              : status === "uploading"
-                ? `Uploading · ${progress}%`
-                : "Submit"}
+            {busy && <Loader2 className="animate-spin" />}
+            {isGenerating
+              ? "Creating…"
+              : status === "presigning"
+                ? "Preparing…"
+                : status === "uploading"
+                  ? `Uploading · ${progress}%`
+                  : "Submit"}
           </Button>
+
+          {submitError && <p className="text-xs text-destructive">{submitError}</p>}
 
           {status === "success" && mediaId && (
             <p className="truncate text-center font-mono text-[11px] text-muted-foreground">
               media: {mediaId}
+            </p>
+          )}
+          {generationId && (
+            <p className="truncate text-center font-mono text-[11px] text-muted-foreground">
+              generation: {generationId}
             </p>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { db } from "@/db/drizzle";
-import { generation, media } from "@/db/schema";
+import { face, generation, media } from "@/db/schema";
+import { blur_methods } from "@/lib/backend-client";
 import { DOWNLOAD_URL_EXPIRES_IN, GENERATION_CACHE_TTL } from "@/lib/constants";
 import { redis } from "@/redis/client";
 import { generationKey } from "@/redis/keys";
@@ -120,6 +121,62 @@ export const GenerationRouters = createTRPCRouter({
     }),
 
   /**
+   * Create an image generation record from an uploaded media id.
+   * The blur job itself isn't dispatched yet — for now we just log the ids.
+   */
+  generated_img: protectProcedure
+    .input(z.object({
+      media_id: z.string().min(1),
+      face_id: z.string().nullish(),
+      blur_id: z.enum(blur_methods),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      // Only allow media/face rows owned by the caller.
+      const mediaRows = await db
+        .select()
+        .from(media)
+        .where(and(eq(media.id, input.media_id), eq(media.user_id, userId)))
+        .limit(1);
+      if (!mediaRows[0]) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Media not found" });
+      }
+
+      if (input.face_id) {
+        const faceRows = await db
+          .select()
+          .from(face)
+          .where(and(eq(face.id, input.face_id), eq(face.user_id, userId)))
+          .limit(1);
+        if (!faceRows[0]) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Face not found" });
+        }
+      }
+
+      const rows = await db
+        .insert(generation)
+        .values({
+          user_id: userId,
+          blur_type: input.blur_id,
+          face_id: input.face_id ?? null,
+          input_media_id: input.media_id,
+          is_video: false,
+        })
+        .returning();
+      const created = rows[0];
+
+      console.log("[generated_img]", {
+        face_id: created.face_id,
+        media_id: created.input_media_id,
+        blur_id: created.blur_type,
+        generation_id: created.id,
+      });
+
+      return { generation_id: created.id };
+    }),
+
+  /**
    * Delete a generation (owner only) along with its output artifacts: the
    * output S3 object, its cached URL, and the output media row. The input
    * media is left untouched since it lives in the user's library.
@@ -167,4 +224,6 @@ export const GenerationRouters = createTRPCRouter({
 
       return { deletedGeneration: true, deletedOutputMedia };
     }),
+
+  
 })
