@@ -1,6 +1,8 @@
+"use client"
 import type { ReactNode } from "react"
 import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
+import { cn } from "cn"
 
 type SiteHeaderProps = {
   /** Rendered when provided — takes precedence over `children`. */
@@ -10,8 +12,12 @@ type SiteHeaderProps = {
 }
 
 export function SiteHeader({ title, children }: SiteHeaderProps) {
+  const {open} = useSidebar()
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 px-4">
+    <header className={cn(
+      "flex border-b  shrink-0 items-center gap-2 px-4",
+      open ?"h-[65px]":"h-[49px]"
+    )}>
       <SidebarTrigger className="-ml-1" />
       <Separator
         orientation="vertical"

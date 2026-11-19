@@ -29,6 +29,19 @@ export const useGenerationById = (id: string, enabled = true) => {
   )
 }
 
+/** Create an image generation record after the media has been uploaded. */
+export const useGenerateImage = () => {
+  const trpc = useTRPC()
+  const queryClient = useQueryClient()
+  return useMutation(
+    trpc.generation.generated_img.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries(trpc.generation.getAll.queryFilter())
+      },
+    }),
+  )
+}
+
 /** Delete a generation (plus its output artifacts); refreshes list + detail. */
 export const useDeleteGeneration = () => {
   const trpc = useTRPC()

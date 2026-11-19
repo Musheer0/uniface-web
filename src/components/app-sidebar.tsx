@@ -67,25 +67,20 @@ export function AppSidebar({
       className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
     >
       {/* Brand */}
-      <SidebarHeader className="px-3 pt-4 pb-6">
+      <SidebarHeader className="px-3 border-b">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              size="lg"
-              render={<Link href="/faces" />}
-              className="h-12 gap-3 rounded-xl px-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              size={"lg"}
+              className=" gap-3 rounded-xl px-2 hover:bg-sidebar"
             >
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground">
-                <ScanFace className="size-5" />
-              </span>
+              <img src={"/logo.png"} className="size-4"/>
 
               <span className="grid flex-1 text-left leading-tight">
-                <span className="text-[15px] font-semibold tracking-tight">
+                <span className="text-[15px] font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
                   Uniface
                 </span>
-                <span className="mt-0.5 text-xs text-sidebar-foreground/45">
-                  Face blur studio
-                </span>
+        
               </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
