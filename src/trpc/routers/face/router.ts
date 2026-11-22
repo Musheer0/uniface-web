@@ -1,6 +1,7 @@
 import { db } from "@/db/drizzle";
 import { face, media } from "@/db/schema";
 import { MAX_PHOTO_LIMIT, MAX_VIDEO_LIMIT, DOWNLOAD_URL_EXPIRES_IN } from "@/lib/constants";
+import { getKey } from "@/lib/get-key";
 import { deleteObject } from "@/s3/delete-object";
 import {
   getCachedDownloadUrl,
@@ -58,7 +59,13 @@ export const Facerouters = createTRPCRouter({
       uploaded_type:"FACE"
     }).returning({ id: media.id });
     const mediaId = new_media[0].id
-    key = key.replace("<faceId>", mediaId)
+    key = getKey({
+      file_name:input.file_name,
+      media_id:mediaId,
+      upload_type:"user",
+      userId:userId,
+      face:true
+    })
     let new_face: typeof face.$inferSelect;
     try {
       const rows = await db.insert(face).values({

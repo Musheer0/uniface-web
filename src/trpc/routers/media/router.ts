@@ -1,6 +1,7 @@
 import { db } from "@/db/drizzle";
 import { face, media } from "@/db/schema";
 import { MAX_PHOTO_LIMIT, MAX_VIDEO_LIMIT, DOWNLOAD_URL_EXPIRES_IN } from "@/lib/constants";
+import { getKey } from "@/lib/get-key";
 import { deleteObject } from "@/s3/delete-object";
 import {
   getCachedDownloadUrl,
@@ -62,7 +63,12 @@ export const MediaRouters = createTRPCRouter({
       user_id: userId
     }).returning();
     const new_media = rows[0];
-    key = key.replace("<mediaId>", new_media.id);
+    key = getKey({
+      file_name:input.file_name,
+      media_id:rows[0].id,
+      upload_type:"user",
+      userId:userId
+    })
     // Swap the placeholder key for the final one.
     const updated = await db
       .update(media)
@@ -74,6 +80,7 @@ export const MediaRouters = createTRPCRouter({
       upload_data = await getUploadUrl(key, input.file_type);
     } catch (err) {
       // Presign failed — roll back the row so it never orphans.
+      console.log("failed to upload [MediaRouter]")
       await db.delete(media).where(and(eq(media.id, new_media.id), eq(media.user_id, userId)));
       throw err;
     }
@@ -141,6 +148,7 @@ export const MediaRouters = createTRPCRouter({
         .where(and(eq(media.id, input.id), eq(media.user_id, userId)))
         .limit(1);
       const row = rows[0];
+      console.log({rows,input})
       if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Media not found" });
 
       // Remove dependent faces first (S3 + cache + rows).

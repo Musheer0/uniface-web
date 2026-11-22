@@ -255,7 +255,7 @@ export function VideoGenerationUI({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
       {/* Preview + timeline */}
       <section className="flex min-h-[55vh] w-full flex-col bg-black md:min-h-0 md:flex-1">
-        <div className="relative flex min-h-0 flex-1 items-center justify-center p-4 pt-20 md:p-8 md:pt-24">
+        <div className="relative flex min-h-0 flex-1 items-center justify-center px-0! p-4 pt-20 md:p-8 md:pt-24">
           {previewUrl && (
             <video
               src={previewUrl}

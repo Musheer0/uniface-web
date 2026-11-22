@@ -5,12 +5,14 @@ import { DOWNLOAD_URL_EXPIRES_IN, GENERATION_CACHE_TTL } from "@/lib/constants";
 import { redis } from "@/redis/client";
 import { generationKey } from "@/redis/keys";
 import { deleteObject } from "@/s3/delete-object";
-import { invalidateDownloadUrl } from "@/s3/get-download-url";
+import { getDownloadUrl, invalidateDownloadUrl } from "@/s3/get-download-url";
 import { createTRPCRouter, protectProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, lt } from "drizzle-orm";
 import z from "zod";
 import { withMediaUrl } from "../media/router";
+import { blurImage } from "@/features/generations/actions/blur-image";
+import { getKey } from "@/lib/get-key";
 
 type GenerationRow = typeof generation.$inferSelect;
 
@@ -142,7 +144,7 @@ export const GenerationRouters = createTRPCRouter({
       if (!mediaRows[0]) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Media not found" });
       }
-
+       
       if (input.face_id) {
         const faceRows = await db
           .select()
@@ -165,15 +167,46 @@ export const GenerationRouters = createTRPCRouter({
         })
         .returning();
       const created = rows[0];
-
-      console.log("[generated_img]", {
-        face_id: created.face_id,
-        media_id: created.input_media_id,
-        blur_id: created.blur_type,
-        generation_id: created.id,
+      const inputMedia = mediaRows[0]
+      const output_key = getKey({
+        file_name:"blurred-"+inputMedia.name,
+        userId,
+        media_id:inputMedia.id,
+        upload_type:"generation",
+      })
+      console.log({output_key,inputMedia})
+      if(input.face_id ){
+        //TODO get face
+      }
+      const generation_response = await blurImage({
+        blurMethod:input.blur_id,
+        generationId:created.id,
+        inputKey:mediaRows[0].object_key,
+        outputKey:output_key,
+        user_id:userId,
       });
+      const [output_media] = await db.insert(media)
+      .values({
+        name:inputMedia.name,
+        object_key:output_key,
+        user_id:userId,
+        size:inputMedia.size,
+        uploaded_type:"GENERATED",
+        type:inputMedia.type
+      }).returning();
+      if(!output_media) {
+        //TODO raise a bg job to retry saving
+        throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"error saving output to db"})
+      }
+       const [{output_object_key,...generation_job}] = await db.update(generation)
+       .set({
+        output_object_key:output_media.object_key,
+        output_media_id:output_media.id
+       })
+       .where(eq(generation.id,created.id)).returning();
+        const media_url = await getDownloadUrl(output_key);
 
-      return { generation_id: created.id };
+      return {...generation_job, media_url };
     }),
 
   /**
@@ -205,7 +238,7 @@ export const GenerationRouters = createTRPCRouter({
           try {
             await deleteObject(output.object_key);
           } catch {
-            console.error("Error deleting", output.object_key);
+            console.error("Error deleting outuput", output.object_key);
           }
           await invalidateDownloadUrl(output.object_key);
           await db

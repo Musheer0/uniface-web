@@ -35,8 +35,9 @@ export const useGenerateImage = () => {
   const queryClient = useQueryClient()
   return useMutation(
     trpc.generation.generated_img.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries(trpc.generation.getAll.queryFilter())
+      onSuccess: (data) => {
+        console.log(data)
+        // queryClient.invalidateQueries(trpc.generation.getAll.queryFilter())
       },
     }),
   )

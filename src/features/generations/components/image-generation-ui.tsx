@@ -11,6 +11,7 @@ import { BlurMethodSelect } from "@/features/generations/components/blur-method-
 import ChangeFileButton from "@/features/generations/components/change-file-button"
 import { FaceSelector } from "@/features/generations/components/face-selector"
 import { useGenerateImage } from "@/features/generations/hooks"
+import Link from "next/link"
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B"
@@ -36,14 +37,14 @@ export function ImageGenerationUI({
   // Same two-step upload as the face dialog: presign → XHR → progress / abort /
   // orphan cleanup. Runs on submit — the returned `media.id` is used below.
   const { upload, abort, progress, status, error, isBusy } = useFileUpload()
-  const { mutateAsync: createGeneration, isPending: isGenerating } = useGenerateImage()
+  const { mutateAsync: createGeneration, isPending: isGenerating,data:generationResult } = useGenerateImage()
 
   const [blurMethod, setBlurMethod] = useState<BlurMethod>("blackout")
   const [faceId, setFaceId] = useState<string | null>(null)
   const [mediaId, setMediaId] = useState<string | null>(null)
   const [generationId, setGenerationId] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
-
+  const [downloadOutputUrl, setDownloadOutputUrl] = useState<string|null>(null)
   const busy = isBusy || isGenerating
 
   const handleCancel = () => {
@@ -56,6 +57,7 @@ export function ImageGenerationUI({
     if (busy) return
     setSubmitError(null)
     try {
+      setDownloadOutputUrl(null)
       // 1. Upload the bytes, then use the returned media id.
       const data = await upload(file)
       if (!data) return // cancelled
@@ -68,7 +70,8 @@ export function ImageGenerationUI({
         face_id: faceId,
         blur_id: blurMethod,
       })
-      setGenerationId(generation.generation_id)
+      setGenerationId(generation.id);
+      setDownloadOutputUrl(generation.media_url)
     } catch (err) {
       // Upload errors are surfaced by the hook; show generation errors here.
       if (!error) {
@@ -210,16 +213,11 @@ export function ImageGenerationUI({
 
           {submitError && <p className="text-xs text-destructive">{submitError}</p>}
 
-          {status === "success" && mediaId && (
-            <p className="truncate text-center font-mono text-[11px] text-muted-foreground">
-              media: {mediaId}
-            </p>
-          )}
-          {generationId && (
-            <p className="truncate text-center font-mono text-[11px] text-muted-foreground">
-              generation: {generationId}
-            </p>
-          )}
+           {generationResult && <>
+           
+           <Link href={generationResult.media_url} target="_blank">
+           <Button >Download Generated Image</Button></Link>
+           </>}
         </div>
       </aside>
     </div>
