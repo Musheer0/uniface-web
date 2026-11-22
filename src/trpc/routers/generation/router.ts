@@ -14,7 +14,8 @@ import { withMediaUrl } from "../media/router";
 import { blurImage } from "@/features/generations/actions/blur-image";
 import { getKey } from "@/lib/get-key";
 import { inngest } from "@/inngest/client";
-import { BlurVideoRequest, blurVideoSchema } from "@/inngest/blur-video.function";
+import {  blurVideoSchema } from "@/inngest/blur-video.function";
+import { TimestampRangesSchema, blurVideoTimestampSchema } from "@/inngest/blur-video-timeastamp.function";
 
 type GenerationRow = typeof generation.$inferSelect;
 
@@ -472,5 +473,140 @@ generated_img: protectProcedure
 
     return { jobId: job.id };
   }),
+ generate_video_timestamped: protectProcedure
+  .input(
+    z.object({
+      media_id: z.string().min(1),
+      face_id: z.string().nullish(),
+      blur_id: z.enum(blur_methods),
+      time_stamps: TimestampRangesSchema,
+    })
+  )
+  .mutation(async ({ ctx, input }) => {
+    const userId = ctx.session.user.id;
+
+    // 1. Validate source media
+    const [userMedia] = await db
+      .select()
+      .from(media)
+      .where(
+        and(
+          eq(media.id, input.media_id),
+          eq(media.user_id, userId)
+        )
+      )
+      .limit(1);
+
+    if (!userMedia) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Video not found",
+      });
+    }
+
+    if (!userMedia.object_key || !userMedia.type?.includes("video/")) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Invalid video file",
+      });
+    }
+
+    // 2. Validate optional face
+    let faceKey: string | undefined;
+
+    if (input.face_id) {
+      const [filterFace] = await db
+        .select({ object_key: face.object_key })
+        .from(face)
+        .where(
+          and(
+            eq(face.id, input.face_id),
+            eq(face.user_id, userId)
+          )
+        )
+        .limit(1);
+
+      if (!filterFace?.object_key) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Face not found or invalid face ID",
+        });
+      }
+
+      faceKey = filterFace.object_key;
+    }
+
+    const outputFileName = `blurred-${userMedia.name}`;
+
+    // 3. Create output media and generation atomically
+    const job = await db.transaction(async (tx) => {
+      const [outputMedia] = await tx
+        .insert(media)
+        .values({
+          user_id: userId,
+          name: outputFileName,
+          type: userMedia.type,
+          object_key: "pending",
+          uploaded_type: "GENERATED",
+          size: userMedia.size,
+        })
+        .returning({ id: media.id });
+
+      if (!outputMedia) {
+        throw new Error("Failed to create output media");
+      }
+
+      const outputKey = getKey({
+        file_name: outputFileName,
+        media_id: outputMedia.id,
+        upload_type: "generation",
+        userId,
+      });
+
+      await tx
+        .update(media)
+        .set({ object_key: outputKey })
+        .where(eq(media.id, outputMedia.id));
+
+      const [generationJob] = await tx
+        .insert(generation)
+        .values({
+          blur_type: input.blur_id,
+          face_id: input.face_id ?? null,
+          input_media_id: userMedia.id,
+          user_id: userId,
+          is_video: true,
+          output_media_id: outputMedia.id,
+          output_object_key: outputKey,
+        })
+        .returning();
+
+      if (!generationJob) {
+        throw new Error("Failed to create generation");
+      }
+
+      return {
+        ...generationJob,
+        outputKey,
+      };
+    });
+
+    // 4. Validate and dispatch Inngest event
+    const event = blurVideoTimestampSchema.parse({
+      generation_id: job.id,
+      output_video_key: job.outputKey,
+      user_id: userId,
+      video_key: userMedia.object_key,
+      ...(faceKey && { face_key: faceKey }),
+      timestamps: input.time_stamps,
+    });
+
+    await inngest.send({
+      name: "blur-video-timestamps",
+      data: event,
+    });
+
+    return { jobId: job.id };
+  })
 
  })
