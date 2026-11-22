@@ -30,3 +30,13 @@ export const protectProcedure = baseProcedure.use(async ({ ctx, next }) => {
   if (!session?.user) throw new TRPCError({ code: "UNAUTHORIZED" })
   return next({ ctx: { ...ctx, session } });
 })
+
+export const internalProcedure = baseProcedure.use(async({ctx,next})=>{
+  const api_key = process.env.INTERNAL_API_KEY;
+  const req_headers = await headers()
+  const request_api_key = req_headers.get("X-internal-api-key")
+  if(!request_api_key || request_api_key!==api_key|| !api_key){
+    throw new TRPCError({code:"UNAUTHORIZED"});
+  }
+  return next()
+})

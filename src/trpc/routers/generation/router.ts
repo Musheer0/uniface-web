@@ -6,7 +6,7 @@ import { redis } from "@/redis/client";
 import { generationKey } from "@/redis/keys";
 import { deleteObject } from "@/s3/delete-object";
 import { getDownloadUrl, invalidateDownloadUrl } from "@/s3/get-download-url";
-import { createTRPCRouter, protectProcedure } from "@/trpc/init";
+import { createTRPCRouter, internalProcedure, protectProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, lt } from "drizzle-orm";
 import z from "zod";
@@ -258,5 +258,49 @@ export const GenerationRouters = createTRPCRouter({
       return { deletedGeneration: true, deletedOutputMedia };
     }),
 
-  
-})
+     generate_video: protectProcedure
+     .input(z.object({
+      media_id: z.string().min(1),
+      face_id: z.string().nullish(),
+      blur_id: z.enum(blur_methods),
+     }))
+     .mutation(async({ctx,input})=>{
+       const userId = ctx.session.user.id;
+       const [userMedia] = await db.select().from(media).where(
+        and(
+          eq(media.id,input.media_id),
+          eq(media.user_id, userId)
+        )
+       );
+       if(!userMedia) throw new TRPCError({code:"UNAUTHORIZED",message:"video not found"});
+       const output_file_name ="blurred-"+ userMedia.name
+       const [output_media] = await db.insert(media).values(
+        {
+          ...userMedia,
+          object_key:"<placeHolder>",
+          uploaded_type:"GENERATED",
+          name:output_file_name
+        }
+       ).returning();
+       const outputKey = getKey({
+        file_name:output_file_name,
+        media_id:output_media.id,
+        upload_type:"generation",
+        userId:userId,
+       });
+       const job = await db.transaction(async(ctx)=>{
+          await ctx.update(media).set({object_key:outputKey}).where(eq(media.id, output_media.id));
+          const [generation_job] = await ctx.insert(generation).values({
+            blur_type:input.blur_id ,
+            input_media_id:userMedia.id,
+            user_id:userId,
+            is_video:true,
+            output_media_id:output_media.id,
+            output_object_key:outputKey
+          }).returning();
+          return generation_job
+       });
+       //TODO trigger inggest 
+       return {jobId:job.id}
+     })
+ })
