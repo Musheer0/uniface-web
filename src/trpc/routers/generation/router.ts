@@ -13,6 +13,8 @@ import z from "zod";
 import { withMediaUrl } from "../media/router";
 import { blurImage } from "@/features/generations/actions/blur-image";
 import { getKey } from "@/lib/get-key";
+import { inngest } from "@/inngest/client";
+import { BlurVideoRequest } from "@/inngest/blur-video.function";
 
 type GenerationRow = typeof generation.$inferSelect;
 
@@ -300,7 +302,15 @@ export const GenerationRouters = createTRPCRouter({
           }).returning();
           return generation_job
        });
-       //TODO trigger inggest 
+       inngest.send({
+        name:"blur-video",
+        data:{
+          generation_id:job.id,
+          output_video_key:outputKey,
+          user_id:userId,
+          video_key:userMedia.object_key
+        } as BlurVideoRequest
+       })
        return {jobId:job.id}
      })
  })
