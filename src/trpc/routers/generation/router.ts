@@ -1,5 +1,5 @@
 import { db } from "@/db/drizzle";
-import { face, generation, media } from "@/db/schema";
+import { face,  generation, media } from "@/db/schema";
 import { blur_methods } from "@/lib/backend-client";
 import { DOWNLOAD_URL_EXPIRES_IN, GENERATION_CACHE_TTL } from "@/lib/constants";
 import { redis } from "@/redis/client";
@@ -14,7 +14,7 @@ import { withMediaUrl } from "../media/router";
 import { blurImage } from "@/features/generations/actions/blur-image";
 import { getKey } from "@/lib/get-key";
 import { inngest } from "@/inngest/client";
-import { BlurVideoRequest } from "@/inngest/blur-video.function";
+import { BlurVideoRequest, blurVideoSchema } from "@/inngest/blur-video.function";
 
 type GenerationRow = typeof generation.$inferSelect;
 
@@ -128,88 +128,176 @@ export const GenerationRouters = createTRPCRouter({
    * Create an image generation record from an uploaded media id.
    * The blur job itself isn't dispatched yet — for now we just log the ids.
    */
-  generated_img: protectProcedure
-    .input(z.object({
+ 
+generated_img: protectProcedure
+  .input(
+    z.object({
       media_id: z.string().min(1),
       face_id: z.string().nullish(),
       blur_id: z.enum(blur_methods),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
+    })
+  )
+  .mutation(async ({ ctx, input }) => {
+    const userId = ctx.session.user.id;
 
-      // Only allow media/face rows owned by the caller.
-      const mediaRows = await db
-        .select()
-        .from(media)
-        .where(and(eq(media.id, input.media_id), eq(media.user_id, userId)))
+    // 1. Validate input media ownership
+    const [inputMedia] = await db
+      .select()
+      .from(media)
+      .where(
+        and(
+          eq(media.id, input.media_id),
+          eq(media.user_id, userId)
+        )
+      )
+      .limit(1);
+
+    if (!inputMedia) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Media not found",
+      });
+    }
+
+    if (!inputMedia.object_key || !inputMedia.type?.startsWith("image/")) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Invalid image file",
+      });
+    }
+
+    // 2. Validate optional face
+    let faceKey: string | undefined;
+
+    if (input.face_id) {
+      const [userFace] = await db
+        .select({
+          id: face.id,
+          object_key: face.object_key,
+        })
+        .from(face)
+        .where(
+          and(
+            eq(face.id, input.face_id),
+            eq(face.user_id, userId)
+          )
+        )
         .limit(1);
-      if (!mediaRows[0]) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Media not found" });
-      }
-       
-      if (input.face_id) {
-        const faceRows = await db
-          .select()
-          .from(face)
-          .where(and(eq(face.id, input.face_id), eq(face.user_id, userId)))
-          .limit(1);
-        if (!faceRows[0]) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Face not found" });
-        }
+
+      if (!userFace) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Face not found",
+        });
       }
 
-      const rows = await db
+      faceKey = userFace.object_key;
+    }
+
+    const outputFileName = `blurred-${inputMedia.name}`;
+
+    // 3. Create generation and output media atomically
+    const job = await db.transaction(async (tx) => {
+      const [outputMedia] = await tx
+        .insert(media)
+        .values({
+          name: outputFileName,
+          object_key: "pending",
+          user_id: userId,
+          size: inputMedia.size,
+          type: inputMedia.type,
+          uploaded_type: "GENERATED",
+        })
+        .returning();
+
+      const outputKey = getKey({
+        file_name: outputFileName,
+        userId,
+        media_id: outputMedia.id,
+        upload_type: "generation",
+      });
+
+      await tx
+        .update(media)
+        .set({ object_key: outputKey })
+        .where(eq(media.id, outputMedia.id));
+
+      const [generationJob] = await tx
         .insert(generation)
         .values({
           user_id: userId,
           blur_type: input.blur_id,
           face_id: input.face_id ?? null,
-          input_media_id: input.media_id,
+          input_media_id: inputMedia.id,
           is_video: false,
+          output_media_id: outputMedia.id,
+          output_object_key: outputKey,
         })
         .returning();
-      const created = rows[0];
-      const inputMedia = mediaRows[0]
-      const output_key = getKey({
-        file_name:"blurred-"+inputMedia.name,
-        userId,
-        media_id:inputMedia.id,
-        upload_type:"generation",
-      })
-      console.log({output_key,inputMedia})
-      if(input.face_id ){
-        //TODO get face
-      }
-      const generation_response = await blurImage({
-        blurMethod:input.blur_id,
-        generationId:created.id,
-        inputKey:mediaRows[0].object_key,
-        outputKey:output_key,
-        user_id:userId,
-      });
-      const [output_media] = await db.insert(media)
-      .values({
-        name:inputMedia.name,
-        object_key:output_key,
-        user_id:userId,
-        size:inputMedia.size,
-        uploaded_type:"GENERATED",
-        type:inputMedia.type
-      }).returning();
-      if(!output_media) {
-        //TODO raise a bg job to retry saving
-        throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"error saving output to db"})
-      }
-       const [{output_object_key,...generation_job}] = await db.update(generation)
-       .set({
-        output_object_key:output_media.object_key,
-        output_media_id:output_media.id
-       })
-       .where(eq(generation.id,created.id)).returning();
-        const media_url = await getDownloadUrl(output_key);
 
-      return {...generation_job, media_url };
-    }),
+      return {
+        ...generationJob,
+        outputKey,
+        outputMediaId: outputMedia.id,
+      };
+    });
+
+    // 4. Mark generation as started
+    await db
+      .update(generation)
+      .set({ status: "STARTED" })
+      .where(eq(generation.id, job.id));
+
+    try {
+      // 5. Process image
+      const generationResponse = await blurImage({
+        blurMethod: input.blur_id,
+        generationId: job.id,
+        inputKey: inputMedia.object_key,
+        outputKey: job.outputKey,
+        user_id: userId,
+        // Pass faceKey here if your blurImage API supports it.
+      });
+
+      // 6. Mark generation completed
+      await db
+        .update(generation)
+        .set({
+          status: "COMPLETED",
+          output_object_key: job.outputKey,
+        })
+        .where(eq(generation.id, job.id));
+
+      // 7. Generate download URL
+      const media_url = await getDownloadUrl(job.outputKey);
+
+      return {
+        id: job.id,
+        status: "COMPLETED" as const,
+        output_media_id: job.outputMediaId,
+        output_object_key: job.outputKey,
+        media_url,
+      };
+    } catch (error) {
+      console.error("[generated-img] Image processing failed:", error);
+
+      await db
+        .update(generation)
+        .set({
+          status: "FAILED",
+          failure_reason:
+            error instanceof Error
+              ? error.message
+              : "Image processing failed",
+        })
+        .where(eq(generation.id, job.id));
+
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Image generation failed",
+      });
+    }
+  }),
 
   /**
    * Delete a generation (owner only) along with its output artifacts: the
@@ -260,57 +348,129 @@ export const GenerationRouters = createTRPCRouter({
       return { deletedGeneration: true, deletedOutputMedia };
     }),
 
-     generate_video: protectProcedure
-     .input(z.object({
+  generate_video: protectProcedure
+  .input(
+    z.object({
       media_id: z.string().min(1),
       face_id: z.string().nullish(),
       blur_id: z.enum(blur_methods),
-     }))
-     .mutation(async({ctx,input})=>{
-       const userId = ctx.session.user.id;
-       const [userMedia] = await db.select().from(media).where(
+    })
+  )
+  .mutation(async ({ ctx, input }) => {
+    const userId = ctx.session.user.id;
+
+    // 1. Validate source media
+    const [userMedia] = await db
+      .select()
+      .from(media)
+      .where(
         and(
-          eq(media.id,input.media_id),
+          eq(media.id, input.media_id),
           eq(media.user_id, userId)
         )
-       );
-       if(!userMedia) throw new TRPCError({code:"UNAUTHORIZED",message:"video not found"});
-       const output_file_name ="blurred-"+ userMedia.name
-       const [output_media] = await db.insert(media).values(
-        {
-          ...userMedia,
-          object_key:"<placeHolder>",
-          uploaded_type:"GENERATED",
-          name:output_file_name
-        }
-       ).returning();
-       const outputKey = getKey({
-        file_name:output_file_name,
-        media_id:output_media.id,
-        upload_type:"generation",
-        userId:userId,
-       });
-       const job = await db.transaction(async(ctx)=>{
-          await ctx.update(media).set({object_key:outputKey}).where(eq(media.id, output_media.id));
-          const [generation_job] = await ctx.insert(generation).values({
-            blur_type:input.blur_id ,
-            input_media_id:userMedia.id,
-            user_id:userId,
-            is_video:true,
-            output_media_id:output_media.id,
-            output_object_key:outputKey
-          }).returning();
-          return generation_job
-       });
-       inngest.send({
-        name:"blur-video",
-        data:{
-          generation_id:job.id,
-          output_video_key:outputKey,
-          user_id:userId,
-          video_key:userMedia.object_key
-        } as BlurVideoRequest
-       })
-       return {jobId:job.id}
-     })
+      )
+      .limit(1);
+
+    if (!userMedia) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Video not found",
+      });
+    }
+
+    if (!userMedia.object_key || !userMedia.type?.includes("video/")) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Invalid video file",
+      });
+    }
+
+    // 2. Validate optional face
+    let faceKey: string | undefined;
+
+    if (input.face_id) {
+      const [filterFace] = await db
+        .select({ object_key: face.object_key })
+        .from(face)
+        .where(
+          and(
+            eq(face.id, input.face_id),
+            eq(face.user_id, userId)
+          )
+        )
+        .limit(1);
+
+      if (!filterFace?.object_key) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Face not found or invalid face ID",
+        });
+      }
+
+      faceKey = filterFace.object_key;
+    }
+
+    const outputFileName = `blurred-${userMedia.name}`;
+
+    // 3. Create output media and generation atomically
+    const job = await db.transaction(async (tx) => {
+      const [outputMedia] = await tx
+        .insert(media)
+        .values({
+          user_id: userId,
+          name: outputFileName,
+          type: userMedia.type,
+          object_key: "pending",
+          uploaded_type: "GENERATED",
+          size:userMedia.size
+        })
+        .returning({ id: media.id });
+
+      const outputKey = getKey({
+        file_name: outputFileName,
+        media_id: outputMedia.id,
+        upload_type: "generation",
+        userId,
+      });
+
+      await tx
+        .update(media)
+        .set({ object_key: outputKey })
+        .where(eq(media.id, outputMedia.id));
+
+      const [generationJob] = await tx
+        .insert(generation)
+        .values({
+          blur_type: input.blur_id,
+          input_media_id: userMedia.id,
+          user_id: userId,
+          is_video: true,
+          output_media_id: outputMedia.id,
+          output_object_key: outputKey,
+        })
+        .returning();
+
+      return {
+        ...generationJob,
+        outputKey,
+      };
+    });
+
+    // 4. Dispatch Inngest event
+    const event = blurVideoSchema.parse({
+      generation_id: job.id,
+      output_video_key: job.outputKey,
+      user_id: userId,
+      video_key: userMedia.object_key,
+      ...(faceKey && { face_key: faceKey }),
+    });
+
+    await inngest.send({
+      name: "blur-video",
+      data: event,
+    });
+
+    return { jobId: job.id };
+  }),
+
  })

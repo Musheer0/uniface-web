@@ -14,6 +14,7 @@ export const blurVideoSchema = z.object({
   output_video_key: z.string().min(1),
   generation_id: z.string().min(1),
   user_id: z.string().min(1),
+  face_key:z.string().optional()
 });
 
 export type BlurVideoRequest = z.infer<typeof blurVideoSchema>;
@@ -114,13 +115,23 @@ export const blurVideo = inngest.createFunction(
     // STEP 4: Process video
 
     await step.run("process-video", async () => {
-      const result = await blurrfield.blurVideoEveryone({
+      const result = input.face_key ?
+      await blurrfield.blurVideoEveryoneFiltered({
         blur_method: job.blur_type,
         generation_id: job.id,
         output_key: input.output_video_key,
         user_id: input.user_id,
         video_key: input.video_key,
-      });
+        face_key:input.face_key
+      })
+      :
+      await blurrfield.blurVideoEveryone({
+        blur_method: job.blur_type,
+        generation_id: job.id,
+        output_key: input.output_video_key,
+        user_id: input.user_id,
+        video_key: input.video_key,
+      })
 
       if (result.error) {
         throw new Error(result.error);
