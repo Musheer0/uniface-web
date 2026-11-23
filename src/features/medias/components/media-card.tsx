@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Loader2, Trash2 } from "lucide-react"
+import { Download, Loader2, Trash2 } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { downloadFile } from "@/lib/download-file"
 import { useDeleteMedia, type MediaDTO } from "../hooks"
 
 function formatBytes(bytes: number | null) {
@@ -28,9 +29,19 @@ function formatBytes(bytes: number | null) {
 
 export const MediaCard = ({ item }: { item: MediaDTO }) => {
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
   const { mutate, isPending } = useDeleteMedia()
   const isVideo = item.type?.startsWith("video/") ?? false
   const size = formatBytes(item.size)
+
+  const handleDownload = async () => {
+    setIsDownloading(true)
+    try {
+      await downloadFile(item.url, item.name)
+    } finally {
+      setIsDownloading(false)
+    }
+  }
 
   return (
     <figure
@@ -61,6 +72,18 @@ export const MediaCard = ({ item }: { item: MediaDTO }) => {
             className="h-full w-full object-cover"
           />
         )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`Download ${item.name}`}
+          title="Download"
+          disabled={isDownloading || isPending}
+          className="absolute top-2 right-2 size-8 rounded-full bg-background/90 text-muted-foreground backdrop-blur-sm hover:text-foreground"
+          onClick={handleDownload}
+        >
+          {isDownloading ? <Loader2 className="animate-spin" /> : <Download />}
+        </Button>
       </div>
 
       <figcaption className="flex items-center justify-between gap-2 py-1.5 pr-1.5 pl-3">

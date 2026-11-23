@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 export const blurImage = async(
   input:{inputKey:string, 
   outputKey:string,
-  faceId?:string,
+  faceId?:string|null,
     user_id:string,
     blurMethod:BlurMethod,
     generationId:string

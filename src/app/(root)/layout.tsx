@@ -1,4 +1,5 @@
 import { AppSidebar } from "@/components/app-sidebar";
+import { NuqsAdapter } from 'nuqs/adapters/next/app'
 import {
   SidebarInset,
   SidebarProvider,
@@ -9,7 +10,8 @@ import type { ReactNode } from "react";
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <TRPCReactProvider>
+  <NuqsAdapter>
+      <TRPCReactProvider>
       <TooltipProvider>
         <SidebarProvider className="min-w-0 overflow-x-clip">
           <AppSidebar />
@@ -21,5 +23,6 @@ export default function Layout({ children }: { children: ReactNode }) {
         </SidebarProvider>
       </TooltipProvider>
     </TRPCReactProvider>
+  </NuqsAdapter>
   );
 }

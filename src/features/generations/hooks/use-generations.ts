@@ -16,7 +16,19 @@ export const useGenerations = (limit = 20) => {
   return useInfiniteQuery(
     trpc.generation.getAll.infiniteQueryOptions(
       { limit },
-      { getNextPageParam: (lastPage) => lastPage.nextCursor },
+      {
+        getNextPageParam: (lastPage) => lastPage.nextCursor,
+        // Poll while any loaded generation is queued/running so status
+        // changes (and the finished output) show up without a refresh.
+        refetchInterval: (query) =>
+          query.state.data?.pages.some((page) =>
+            page.items.some(
+              (item) => item.status === "PENDING" || item.status === "STARTED",
+            ),
+          )
+            ? 5_000
+            : false,
+      },
     ),
   )
 }
@@ -35,7 +47,7 @@ export const useGenerateImage = () => {
   const queryClient = useQueryClient()
   return useMutation(
     trpc.generation.generated_img.mutationOptions({
-      onSuccess: (data) => {
+      onSuccess: () => {
         //TODO update cache 
         queryClient.invalidateQueries(trpc.generation.getAll.queryFilter())
       },
