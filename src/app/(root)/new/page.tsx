@@ -9,6 +9,7 @@ import { ImageGenerationUI } from "@/features/generations/components/image-gener
 import UploadFile from "@/features/generations/components/upload-file"
 import { VideoGenerationUI } from "@/features/generations/components/video-generation-ui"
 import { useFileStore } from "@/features/generations/hooks/use-file"
+import ChangeFileButton from "@/features/generations/components/change-file-button"
 
 function NewPageContent() {
   const router = useRouter()
@@ -31,7 +32,7 @@ function NewPageContent() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <SiteHeader title="New generation" />
+      <SiteHeader title={file? file.name : "New generation"} right={<div className="ml-auto"><ChangeFileButton /></div>}/>
 
       {!file ? (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -48,9 +49,6 @@ function NewPageContent() {
       ) : (
         <VideoGenerationUI
           key={`${file.name}-${file.size}-${file.lastModified}`}
-          file={file}
-          previewUrl={previewUrl}
-          clearFile={clearFile}
           onDone={() => router.replace(pathname, { scroll: false })}
         />
       )}

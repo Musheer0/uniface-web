@@ -11,10 +11,12 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <TRPCReactProvider>
       <TooltipProvider>
-        <SidebarProvider>
+        <SidebarProvider className="min-w-0 overflow-x-clip">
           <AppSidebar />
-          <SidebarInset>
-            <main className="flex flex-1 flex-col h-full">{children}</main>
+          <SidebarInset className="min-w-0 overflow-x-clip">
+            <main className="flex h-full min-w-0 max-w-full flex-1 flex-col overflow-x-clip">
+              {children}
+            </main>
           </SidebarInset>
         </SidebarProvider>
       </TooltipProvider>

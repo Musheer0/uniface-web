@@ -8,10 +8,11 @@ type SiteHeaderProps = {
   /** Rendered when provided — takes precedence over `children`. */
   title?: string
   /** Rendered only when `title` is not provided. */
-  children?: ReactNode
+  children?: ReactNode,
+  right?:ReactNode
 }
 
-export function SiteHeader({ title, children }: SiteHeaderProps) {
+export function SiteHeader({ title, children,right }: SiteHeaderProps) {
   const {open} = useSidebar()
   return (
     <header className={cn(
@@ -28,6 +29,7 @@ export function SiteHeader({ title, children }: SiteHeaderProps) {
       ) : (
         children
       )}
+      {right}
     </header>
   )
 }

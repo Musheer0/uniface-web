@@ -1,5 +1,5 @@
 import { PutBucketCorsCommand } from "@aws-sdk/client-s3";
-import { s3 ,bucket} from "./src/s3/client.ts";
+import { s3 ,bucket} from "./src/s3/client";
 console.log({bucket})
 await s3.send(
   new PutBucketCorsCommand({
