@@ -7,3 +7,4 @@ export const mediaUrlKey = (objectKey: string) => `s3:url:${objectKey}`;
 /** Redis key for a cached generation DTO. Scoped by user id. */
 export const generationKey = (userId: string, generationId: string) =>
   `generation:${userId}:${generationId}`;
+export const generationStatus = (id:string)=> `status:generation:${id}`

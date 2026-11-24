@@ -1,11 +1,11 @@
 import { db } from "@/db/drizzle";
-import { generation, media } from "@/db/schema";
+import { generation, generation_status, media } from "@/db/schema";
 import { DOWNLOAD_URL_EXPIRES_IN, GENERATION_CACHE_TTL } from "@/lib/constants";
 import { redis } from "@/redis/client";
-import { generationKey } from "@/redis/keys";
+import { generationKey, generationStatus } from "@/redis/keys";
 import { deleteObject } from "@/s3/delete-object";
 import { invalidateDownloadUrl } from "@/s3/get-download-url";
-import { createTRPCRouter, protectProcedure } from "@/trpc/init";
+import { baseProcedure, createTRPCRouter, protectProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, lt } from "drizzle-orm";
 import z from "zod";
@@ -159,6 +159,5 @@ export const GenerationRouters = createTRPCRouter({
 
       return { deletedGeneration: true, deletedOutputMedia };
     }),
-
   ...generateProcedures,
 })

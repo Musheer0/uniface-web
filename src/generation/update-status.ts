@@ -4,6 +4,7 @@ import { generation } from "@/db/schema";
 import { redis } from "@/redis/client";
 import { generationKey } from "@/redis/keys";
 import { eq } from "drizzle-orm";
+import { updateGenerationStatusCache } from "@/generation/status-cache";
 
 export type GenerationStatus = typeof generation.$inferInsert.status;
 export type GenerationStatusUpdate = {
@@ -51,6 +52,7 @@ export const updateGenerationStatus = async (
     // Writes must bust the cached getById DTO or polling clients go stale.
     try {
       await redis.del(generationKey(updated.user_id, updated.id));
+      await updateGenerationStatusCache(id, update.status)
     } catch (err) {
       console.error(`[redis] DEL for generation ${updated.id} failed`, err);
     }
