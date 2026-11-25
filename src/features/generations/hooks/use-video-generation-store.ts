@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import type { BlurMethod } from "@blurfield/js"
 
 import {
   clamp,
@@ -16,6 +17,7 @@ export { useFileStore } from "@/features/generations/hooks/use-file"
  */
 type VideoGenerationState = {
   faceId: string | null
+  blurMethod: BlurMethod
   mediaId: string | null
   duration: number
   currentTime: number
@@ -25,6 +27,7 @@ type VideoGenerationState = {
   scrollOffset: number
 
   setFaceId: (faceId: string | null) => void
+  setBlurMethod: (blurMethod: BlurMethod) => void
   setMediaId: (mediaId: string | null) => void
   setDuration: (duration: number) => void
   setCurrentTime: (currentTime: number) => void
@@ -46,6 +49,7 @@ const nextLayerId = () => `layer-${++layerCounter}`
 
 const initialState = {
   faceId: null,
+  blurMethod: "blackout" as BlurMethod,
   mediaId: null,
   duration: 0,
   currentTime: 0,
@@ -59,6 +63,7 @@ export const useVideoGenerationStore = create<VideoGenerationState>((set, get) =
   ...initialState,
 
   setFaceId: (faceId) => set({ faceId }),
+  setBlurMethod: (blurMethod) => set({ blurMethod }),
   setMediaId: (mediaId) => set({ mediaId }),
   setDuration: (duration) => set({ duration }),
   setCurrentTime: (currentTime) => set({ currentTime }),
@@ -97,7 +102,6 @@ export const useVideoGenerationStore = create<VideoGenerationState>((set, get) =
           id,
           start: gap.start,
           end: gap.start + Math.min(2, gap.end - gap.start),
-          blurMethod: "blackout",
         },
       ],
       activeLayerId: id,
@@ -127,11 +131,10 @@ export const useVideoGenerationStore = create<VideoGenerationState>((set, get) =
   },
 
   applyToFullVideo: () => {
-    const { duration, layers, activeLayerId } = get()
+    const { duration } = get()
     if (!duration) return
-    const blurMethod = layers.find((layer) => layer.id === activeLayerId)?.blurMethod ?? "blackout"
     const id = nextLayerId()
-    set({ layers: [{ id, start: 0, end: duration, blurMethod }], activeLayerId: id })
+    set({ layers: [{ id, start: 0, end: duration }], activeLayerId: id })
   },
 
   initializeFromDuration: (duration) => {
@@ -139,7 +142,7 @@ export const useVideoGenerationStore = create<VideoGenerationState>((set, get) =
     set({
       ...initialState,
       duration,
-      layers: [{ id, start: 0, end: duration, blurMethod: "blackout" }],
+      layers: [{ id, start: 0, end: duration }],
       activeLayerId: id,
     })
   },

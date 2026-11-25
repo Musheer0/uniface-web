@@ -1,10 +1,8 @@
-import type { BlurMethod } from "@blurfield/js"
-
+/** A time segment to blur. The blur method is global for the whole video. */
 export type BlurLayer = {
   id: string
   start: number
   end: number
-  blurMethod: BlurMethod
 }
 
 export type DragMode = "start" | "end" | "move"

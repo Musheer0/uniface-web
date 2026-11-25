@@ -58,7 +58,7 @@ export function TimelineTrack({ timeline }: { timeline: VideoTimeline }) {
 
                   <div
                     role="slider"
-                    aria-label={`${layer.blurMethod} layer start`}
+                    aria-label="Layer start"
                     aria-valuemin={0}
                     aria-valuemax={timeline.duration}
                     aria-valuenow={layer.start}
@@ -72,7 +72,7 @@ export function TimelineTrack({ timeline }: { timeline: VideoTimeline }) {
                   </div>
                   <div
                     role="slider"
-                    aria-label={`${layer.blurMethod} layer end`}
+                    aria-label="Layer end"
                     aria-valuemin={0}
                     aria-valuemax={timeline.duration}
                     aria-valuenow={layer.end}
@@ -89,7 +89,7 @@ export function TimelineTrack({ timeline }: { timeline: VideoTimeline }) {
             />
             <ContextMenuContent>
               <ContextMenuLabel>
-                {formatTime(layer.start)} – {formatTime(layer.end)} · {layer.blurMethod}
+                {formatTime(layer.start)} – {formatTime(layer.end)}
               </ContextMenuLabel>
               <ContextMenuSeparator />
               <ContextMenuItem onClick={() => timeline.setActiveLayerId(layer.id)}>

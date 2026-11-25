@@ -91,7 +91,7 @@ export function ImagePreview({ generation }: { generation: ImageGeneration }) {
         >
           <div
             className={cn(
-              "h-full bg-primary transition-[width]",
+              "h-full max-h-[400px] bg-primary transition-[width]",
               status === "presigning" && "w-1/4 animate-pulse",
             )}
             style={status === "presigning" ? undefined : { width: `${progress}%` }}
@@ -133,7 +133,7 @@ export function ImagePreview({ generation }: { generation: ImageGeneration }) {
               src={previewUrl}
               alt="Selected upload"
               className={cn(
-                "max-h-full max-w-full rounded-xl object-contain shadow-2xl transition-all duration-700 ease-out",
+                "max-h-full max-h-[400px] max-w-full rounded-xl object-contain shadow-2xl transition-all duration-700 ease-out",
                 focused && "rounded-2xl",
               )}
             />

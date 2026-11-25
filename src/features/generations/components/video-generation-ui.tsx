@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 
-import { useFileUpload } from "@/features/face/hooks"
 import { cn } from "@/lib/utils"
 import { VideoControls } from "@/features/generations/components/video-controls"
 import { VideoPreview } from "@/features/generations/components/video-preview"
 import { VideoTimeline } from "@/features/generations/components/video-timeline"
+import { useGenerateVideo } from "@/features/generations/hooks/use-generate-video"
 import {
   useFileStore,
   useVideoGenerationStore,
@@ -18,55 +18,19 @@ type VideoGenerationUIProps = {
 }
 
 export function VideoGenerationUI({ onDone }: VideoGenerationUIProps) {
-  const { abort, progress, status, error, isBusy } = useFileUpload()
   const file = useFileStore((state) => state.file)
-  const clearFile = useFileStore((state) => state.clearFile)
-  const faceId = useVideoGenerationStore((state) => state.faceId)
   const resetVideo = useVideoGenerationStore((state) => state.reset)
-
-  const [submitted, setSubmitted] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const timeline = useVideoTimeline({ isBusy, videoRef, timelineRef, scrollRef })
+  const timeline = useVideoTimeline({ videoRef, timelineRef, scrollRef })
+
+  const generation = useGenerateVideo({ timeline, onDone })
 
   useEffect(() => {
     resetVideo()
   }, [resetVideo])
-
-  const handleCancel = () => {
-    abort()
-    clearFile()
-    onDone()
-  }
-
-  // Temporary: log the timeline and switch to the centered-video view.
-  const handleSubmit = () => {
-    console.log({
-      face_id: faceId,
-      duration: timeline.duration,
-      current_time: timeline.currentTime,
-      zoom: timeline.zoom,
-      layers: timeline.layers.map(({ start, end, blurMethod }) => ({
-        start,
-        end,
-        blur_type: blurMethod,
-      })),
-    })
-    setSubmitted(true)
-  }
-
-  const statusText =
-    status === "presigning"
-      ? "Preparing upload…"
-      : status === "uploading"
-        ? `Uploading · ${progress}%`
-        : status === "success"
-          ? "Upload complete"
-          : status === "error"
-            ? "Upload failed"
-            : "Ready to submit"
 
   if (!file) return null
 
@@ -74,21 +38,21 @@ export function VideoGenerationUI({ onDone }: VideoGenerationUIProps) {
     <div
       className={cn(
         "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto transition-all duration-700 ease-out md:flex-row md:overflow-hidden",
-        submitted && "items-center justify-center",
+        generation.submitted && "items-center justify-center",
       )}
     >
       {/* Preview + timeline */}
       <section
         className={cn(
           "flex min-h-[55vh] w-full min-w-0 flex-col bg-black transition-all duration-700 ease-out md:min-h-0 md:flex-1",
-          submitted && "min-h-0",
+          generation.submitted && "min-h-0",
         )}
       >
         <VideoPreview
-          focused={submitted}
-          status={status}
-          progress={progress}
-          statusText={statusText}
+          focused={generation.submitted}
+          status={generation.status}
+          progress={generation.progress}
+          statusText={generation.statusText}
           videoRef={videoRef}
           timeline={timeline}
         />
@@ -96,7 +60,7 @@ export function VideoGenerationUI({ onDone }: VideoGenerationUIProps) {
         <div
           className={cn(
             "overflow-hidden transition-all duration-500 ease-out",
-            submitted
+            generation.submitted
               ? "pointer-events-none max-h-0 -translate-y-3 opacity-0"
               : "max-h-[420px] translate-y-0 opacity-100",
           )}
@@ -105,9 +69,9 @@ export function VideoGenerationUI({ onDone }: VideoGenerationUIProps) {
             timeline={timeline}
             timelineRef={timelineRef}
             scrollRef={scrollRef}
-            status={status}
-            error={error}
-            isBusy={isBusy}
+            status={generation.status}
+            error={generation.submitError}
+            isBusy={generation.busy}
           />
         </div>
       </section>
@@ -115,16 +79,16 @@ export function VideoGenerationUI({ onDone }: VideoGenerationUIProps) {
       <div
         className={cn(
           "shrink-0 overflow-hidden transition-all duration-500 ease-out",
-          submitted ? "pointer-events-none w-0 opacity-0" : "w-full opacity-100 md:w-[340px]",
+          generation.submitted ? "pointer-events-none w-0 opacity-0" : "w-full opacity-100 md:w-[340px]",
         )}
       >
         <VideoControls
           timeline={timeline}
-          status={status}
-          progress={progress}
-          isBusy={isBusy}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
+          status={generation.status}
+          progress={generation.progress}
+          isBusy={generation.busy}
+          onSubmit={() => void generation.handleSubmit()}
+          onCancel={generation.handleCancel}
         />
       </div>
     </div>

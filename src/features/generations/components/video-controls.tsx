@@ -30,10 +30,24 @@ export function VideoControls({
   const activeLayer = timeline.activeLayer
   const faceId = useVideoGenerationStore((state) => state.faceId)
   const setFaceId = useVideoGenerationStore((state) => state.setFaceId)
+  const blurMethod = useVideoGenerationStore((state) => state.blurMethod)
+  const setBlurMethod = useVideoGenerationStore((state) => state.setBlurMethod)
   const mediaId = useVideoGenerationStore((state) => state.mediaId)
 
   return (
     <aside className="w-full shrink-0 space-y-6 border-t bg-sidebar p-4 md:w-[340px] md:overflow-y-auto md:border-l md:border-t-0 md:p-5">
+      <div className="space-y-2">
+        <h2 className="text-sm font-semibold">Blur method</h2>
+        <BlurMethodSelect
+          value={blurMethod}
+          onChange={setBlurMethod}
+          disabled={isBusy}
+        />
+        <p className="text-xs text-muted-foreground">
+          Applied to every blur segment in the video.
+        </p>
+      </div>
+
       <div className="space-y-2">
         <h2 className="text-sm font-semibold">Active layer</h2>
         {activeLayer ? (
@@ -42,15 +56,7 @@ export function VideoControls({
               <span className="tabular-nums">
                 {formatTime(activeLayer.start)} – {formatTime(activeLayer.end)}
               </span>
-              <span className="rounded-md bg-primary/15 px-2 py-0.5 font-medium text-primary capitalize">
-                {activeLayer.blurMethod}
-              </span>
             </div>
-            <BlurMethodSelect
-              value={activeLayer.blurMethod}
-              onChange={(value) => timeline.updateLayer(activeLayer.id, { blurMethod: value })}
-              disabled={isBusy}
-            />
             <Button
               type="button"
               variant="destructive"
@@ -64,7 +70,7 @@ export function VideoControls({
           </div>
         ) : (
           <p className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
-            Click a timeline layer to see and change its blur type.
+            Click a timeline layer to select it.
           </p>
         )}
       </div>
